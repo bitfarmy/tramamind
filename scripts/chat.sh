@@ -20,7 +20,7 @@ TRAMAMIND_ENDPOINT="${TRAMAMIND_ENDPOINT:-http://localhost:20128/v1/chat/complet
 TRAMAMIND_MODEL="${TRAMAMIND_MODEL:-auto}"
 TRAMAMIND_TIMEOUT="${TRAMAMIND_TIMEOUT:-120}"
 TRAMAMIND_MODE="${TRAMAMIND_MODE:-auto}"
-SYSTEM_PROMPT="${SYSTEM_PROMPT:-Sei TramaMind, l'assistente personale dell'utente. Rispondi in italiano, in modo denso e concreto.}"
+SYSTEM_PROMPT="${SYSTEM_PROMPT:-Sei TramaMind, assistente personale. Rispondi in italiano, in modo denso e concreto.}"
 
 if [[ -f "$ENV_FILE" ]]; then
   set -a
