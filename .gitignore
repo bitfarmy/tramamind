@@ -1,0 +1,26 @@
+# Segreti — MAI committare
+.env
+*.env
+!.env.example
+
+# Dati locali: log, PID, risultati benchmark
+data/
+
+# Dipendenze
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+
+# Modelli e pesi
+*.gguf
+*.bin
+*.safetensors
+models/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
