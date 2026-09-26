@@ -6,7 +6,7 @@
 # I servizi già attivi prima (es. Ollama di sistema) non vengono toccati.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
+cd "$ROOT" || exit 1
 
 echo "🧵 TramaMind — Arresto stack"
 echo "============================"
