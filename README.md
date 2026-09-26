@@ -95,7 +95,7 @@ Dashboard OmniRoute: `http://localhost:20128` — API: `http://localhost:20128/v
 
 | Script | Cosa fa |
 |---|---|
-| `chat.sh` | Chat CLI: mostra **provider, latenza e token** dopo ogni risposta |
+| `chat.sh` | Chat CLI: **provider, latenza e token** dopo ogni risposta + **alias per task** (`--code`, `--think`, `--fast`, `--write`) |
 | `stats.sh` | Consumi per provider, **cache hit rate**, stima risparmio |
 | `doctor.sh` | **Diagnostica completa**: dipendenze, servizi, chiavi, hardware |
 | `install.sh` | Setup iniziale (dipendenze, `.env`, modelli con `--pull-models`) |
@@ -116,7 +116,7 @@ Dashboard OmniRoute: `http://localhost:20128` — API: `http://localhost:20128/v
 - [x] Quick win: provenienza in CLI (`chat.sh`)
 - [x] Quick win: statistiche (`stats.sh`)
 - [x] Quick win: diagnostica (`doctor.sh`)
-- [ ] Alias per task
+- [x] Alias per task (`--code`, `--think`, `--fast`, `--write`)
 - [ ] Auto-detect hardware
 - [ ] Avvio automatico
 - [ ] Benchmark A/B sulle strategie di routing
