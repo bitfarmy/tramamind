@@ -81,6 +81,21 @@ Dalla dashboard:
 #   ⚡ provider=ollama/qwen3:8b · 842ms · 312 token (in 45 / out 267)
 ```
 
+## Alias per task
+
+Scorciatoie per scegliere il modello in base al task:
+
+```bash
+./scripts/chat.sh --code "refactora questa funzione"   # qwen2.5-coder:7b
+./scripts/chat.sh --think "risolvi questo problema"   # deepseek-r1:8b
+./scripts/chat.sh --fast "traduci questo"             # gemma3:4b
+./scripts/chat.sh --write "scrivi un post"            # qwen3:8b
+```
+
+Senza alias il modello è `auto`: decide il router. Nel REPL: `/alias`
+mostra la mappa con il modello attivo, `/use NOME` cambia alias al volo.
+I modelli associati si personalizzano in `.env` (`ALIAS_CODE=`, …).
+
 ## Problemi comuni
 
 | Sintomo | Causa probabile | Soluzione |
