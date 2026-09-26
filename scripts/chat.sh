@@ -7,6 +7,8 @@
 # Uso:
 #   ./scripts/chat.sh                  # modalità interattiva
 #   ./scripts/chat.sh "una domanda"    # singolo colpo
+#   ./scripts/chat.sh --code "refactor questa funzione"
+#   ./scripts/chat.sh --think          # interattiva con deepseek-r1
 #   TRAMAMIND_MODEL=qwen3:8b ./scripts/chat.sh
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -29,6 +31,22 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
+# ── Alias per task → modello (override in .env) ─────────────
+ALIAS_CODE="${ALIAS_CODE:-qwen2.5-coder:7b}"
+ALIAS_THINK="${ALIAS_THINK:-deepseek-r1:8b}"
+ALIAS_FAST="${ALIAS_FAST:-gemma3:4b}"
+ALIAS_WRITE="${ALIAS_WRITE:-qwen3:8b}"
+
+alias_model() {
+  case "$1" in
+    code)  printf '%s' "$ALIAS_CODE" ;;
+    think) printf '%s' "$ALIAS_THINK" ;;
+    fast)  printf '%s' "$ALIAS_FAST" ;;
+    write) printf '%s' "$ALIAS_WRITE" ;;
+    *) return 1 ;;
+  esac
+}
+
 mkdir -p "$DATA_DIR"
 
 if [[ -t 1 ]]; then
@@ -39,6 +57,18 @@ else
 fi
 
 err() { printf '%s✗ %s%s\n' "$C_RED" "$1" "$C_RESET" >&2; }
+
+print_aliases() {
+  printf '%salias per task:%s\n' "$C_BOLD" "$C_RESET"
+  local a m mark
+  for a in code think fast write; do
+    m="$(alias_model "$a")"
+    mark=" "
+    [[ "$m" == "$TRAMAMIND_MODEL" ]] && mark="*"
+    printf '  %s %-7s → %s\n' "$mark" "--$a" "$m"
+  done
+  printf '%s(* = attivo · /use NOME per cambiare)%s\n' "$C_DIM" "$C_RESET"
+}
 
 for cmd in curl python3; do
   command -v "$cmd" >/dev/null 2>&1 || { err "manca '$cmd' — vedi docs/setup.md"; exit 1; }
@@ -196,6 +226,23 @@ PY
     "$((P_PT + P_CT))" "$P_PT" "$P_CT" "$cache_tag" "$C_RESET"
 }
 
+# ── Alias da riga di comando: chat.sh --code "..." ───────────
+if [[ $# -gt 0 && "$1" == --* ]]; then
+  flag="${1#--}"
+  if [[ "$flag" == "help" ]]; then
+    printf 'Uso: %s [--code|--think|--fast|--write] [messaggio]\n' "$0"
+    print_aliases
+    exit 0
+  fi
+  if model="$(alias_model "$flag")"; then
+    TRAMAMIND_MODEL="$model"
+    shift
+  else
+    err "alias '--$flag' sconosciuto — usa --help per la lista"
+    exit 1
+  fi
+fi
+
 # ── Singolo colpo o REPL ─────────────────────────────────────
 if [[ $# -gt 0 ]]; then
   send_message "$*"
@@ -205,7 +252,7 @@ fi
 printf '%s%sTramaMind chat%s · modello %s%s%s\n' \
   "$C_BOLD" "$C_CYAN" "$C_RESET" "$C_BOLD" "$TRAMAMIND_MODEL" "$C_RESET"
 printf '%sendpoint %s%s\n' "$C_DIM" "$TRAMAMIND_ENDPOINT" "$C_RESET"
-printf '%s/exit per uscire · /model NOME per cambiare modello · /clear per azzerare il contesto%s\n\n' "$C_DIM" "$C_RESET"
+printf '%s/exit esce · /model NOME cambia modello · /use NOME cambia alias · /alias mostra gli alias · /clear azzera il contesto%s\n\n' "$C_DIM" "$C_RESET"
 
 while true; do
   printf '%s›%s ' "$C_CYAN" "$C_RESET"
@@ -216,6 +263,15 @@ while true; do
     /model\ *)
       TRAMAMIND_MODEL="${line#/model }"
       printf '%smodello → %s%s\n' "$C_DIM" "$TRAMAMIND_MODEL" "$C_RESET" ;;
+    /alias) print_aliases ;;
+    /use\ *)
+      use_arg="${line#/use }"
+      if use_model="$(alias_model "$use_arg")"; then
+        TRAMAMIND_MODEL="$use_model"
+        printf '%salias %s attivo → modello %s%s\n' "$C_DIM" "$use_arg" "$TRAMAMIND_MODEL" "$C_RESET"
+      else
+        err "alias '$use_arg' sconosciuto — prova /alias"
+      fi ;;
     "") continue ;;
     *) send_message "$line" || true ;;
   esac
