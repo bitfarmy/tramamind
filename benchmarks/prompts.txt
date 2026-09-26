@@ -1,0 +1,7 @@
+Scrivi una funzione Python che calcola la successione di Fibonacci in modo efficiente
+Spiega la differenza tra TCP e UDP in tre frasi
+Traduci in inglese: "Il router sceglie il modello migliore per ogni richiesta"
+Scrivi una query SQL che trova i 10 clienti con più ordini nell'ultimo mese
+Elenca tre vantaggi dei modelli linguistici locali rispetto alle API cloud
+Correggi questo codice: def somma(a b): return a+b
+Riassumi in due frasi cos'è la cache semantica
