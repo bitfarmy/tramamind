@@ -1,107 +1,90 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ─────────────────────────────────────────────────────────────
 # TramaMind — installazione
-# Verifica dipendenze, crea .env e la cartella data/.
+# Uso: ./scripts/install.sh [--pull-models] [--with-openhands]
 #
-# Uso:
-#   ./scripts/install.sh                 # setup base
-#   ./scripts/install.sh --pull-models   # scarica anche i modelli locali
+# 1. Verifica le dipendenze (Node, Python, Ollama, OmniRoute, jq)
+# 2. Crea .env da .env.example (se assente)
+# 3. Crea data/ (log, PID, benchmark)
+# 4. --pull-models: scarica una selezione di modelli locali
+# 5. --with-openhands: scarica le immagini Docker di OpenHands
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PULL_MODELS=false
-[[ "${1:-}" == "--pull-models" ]] && PULL_MODELS=true
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" || exit 1
 
-if [[ -t 1 ]]; then
-  C_BOLD=$'\033[1m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_RESET=$'\033[0m'
-else
-  C_BOLD=""; C_GREEN=""; C_YELLOW=""; C_RED=""; C_RESET=""
-fi
-
-info() { printf '%s%s%s\n' "$C_BOLD" "$1" "$C_RESET"; }
-ok()   { printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$1"; }
-warn() { printf '  %s!%s %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
-die()  { printf '  %s✗ %s%s\n' "$C_RED" "$1" "$C_RESET" >&2; exit 1; }
-
-# ── 1. Dipendenze ────────────────────────────────────────────
-info "1 · Verifica dipendenze"
-
-missing=0
-for cmd in curl git python3 node ollama; do
-  if command -v "$cmd" >/dev/null 2>&1; then
-    ok "$cmd"
-  else
-    warn "$cmd mancante"
-    missing=$((missing+1))
-  fi
+PULL_MODELS=0
+WITH_OPENHANDS=0
+for arg in "$@"; do
+  case "$arg" in
+    --pull-models)    PULL_MODELS=1 ;;
+    --with-openhands) WITH_OPENHANDS=1 ;;
+  esac
 done
 
-if [[ "$missing" -gt 0 ]]; then
-  cat >&2 <<'EOF'
+echo "🧵 TramaMind — Installazione"
+echo "=============================="
 
-Installa i mancanti:
-  · Node 20+     → https://nodejs.org  (o: nvm install 20)
-  · Python 3.10+ → https://python.org
-  · Ollama       → curl -fsSL https://ollama.com/install.sh | sh
-EOF
-  die "Dipendenze mancanti: $missing"
-fi
+# ── 1. Dipendenze ────────────────────────────────────────────
+manca=0
+verifica() {
+  if command -v "$1" >/dev/null 2>&1; then
+    echo "  ✓ $1 ($($1 $2 2>/dev/null | head -1))"
+  else
+    echo "  ✗ $1 — $3"
+    manca=1
+  fi
+}
+
+verifica node    "--version"    "installa Node.js (OmniRoute richiede >= 22.22.2 oppure 24–26)"
+verifica python3 "--version"    "installa Python 3.10+"
+verifica ollama  "--version"    "installa Ollama: https://ollama.com"
+verifica jq      "--version"    "richiesto da benchmarks/benchmark.sh"
 
 if command -v omniroute >/dev/null 2>&1; then
-  ok "omniroute"
+  echo "  ✓ omniroute"
 else
-  die "omniroute mancante — installalo con: npm install -g omniroute"
+  echo "  ! omniroute mancante — provo: npm install -g omniroute"
+  npm install -g omniroute || { echo "  ✗ installazione OmniRoute fallita"; manca=1; }
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
-  warn "jq mancante — serve a benchmarks/benchmark.sh: sudo apt install jq"
-fi
+[[ "$manca" == "1" ]] && { echo ""; echo "⚠️  Risolvi le dipendenze mancanti e rilancia."; exit 1; }
 
-# ── 2. Configurazione ────────────────────────────────────────
-info "2 · Configurazione"
-
-if [[ ! -f "$ROOT_DIR/.env" ]]; then
-  cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
-  ok "creato .env da .env.example"
+# ── 2. Config ────────────────────────────────────────────────
+if [[ ! -f .env ]]; then
+  cp .env.example .env
+  echo "→ Creato .env da .env.example — compilalo con le tue chiavi"
 else
-  ok ".env già presente (non toccato)"
+  echo "→ .env già presente (non toccato)"
 fi
 
-mkdir -p "$ROOT_DIR/data"
-ok "cartella data/ pronta (log, PID, risultati benchmark)"
+# ── 3. Directory dati ────────────────────────────────────────
+mkdir -p data workspace
+echo "→ data/ e workspace/ pronte"
 
-chmod +x "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/benchmarks/*.sh 2>/dev/null || true
-ok "permessi di esecuzione sugli script"
-
-# ── 3. Modelli locali (opzionale) ────────────────────────────
-# Selezione equilibrata per 16 GB RAM. Catalogo completo e
-# alternative per hardware diverso: docs/local-models.md
-MODELS=(
-  "qwen2.5-coder:7b"   # codice, ~5 GB VRAM
-  "qwen3:8b"           # generale + ragionamento, ~6 GB
-  "gemma3:4b"          # generale leggero, ~3 GB
-  "deepseek-r1:8b"     # ragionamento, ~6 GB
-)
-
-if $PULL_MODELS; then
-  info "3 · Download modelli su Ollama"
-  for m in "${MODELS[@]}"; do
-    printf '  → ollama pull %s\n' "$m"
-    ollama pull "$m" || warn "pull fallito per $m"
+# ── 4. Modelli locali (opzionale) ────────────────────────────
+if [[ "$PULL_MODELS" == "1" ]]; then
+  echo "→ Download modelli locali consigliati (vedi docs/local-models.md)..."
+  for m in qwen3:8b qwen2.5-coder:7b deepseek-r1:8b gemma3:4b; do
+    ollama pull "$m" && echo "  ✓ $m"
   done
-else
-  info "3 · Modelli locali: saltato (usa --pull-models per scaricarli)"
 fi
 
-# ── Fine ─────────────────────────────────────────────────────
-info "Installazione completata."
-cat <<EOF
+# ── 5. OpenHands (opzionale) ──────────────────────────────────
+if [[ "$WITH_OPENHANDS" == "1" ]]; then
+  command -v docker >/dev/null 2>&1 || { echo "✗ docker mancante (richiesto da OpenHands)"; exit 1; }
+  echo "→ Pull immagini OpenHands..."
+  docker pull docker.all-hands.dev/all-hands-ai/openhands:latest
+  docker pull docker.all-hands.dev/all-hands-ai/runtime:latest
+  mkdir -p ~/.openhands
+  [[ -f ~/.openhands/config.toml ]] || cp openhands/config.toml ~/.openhands/config.toml
+  echo "  ✓ OpenHands pronto (config in ~/.openhands/config.toml)"
+fi
 
-Prossimi passi:
-  1. Modifica .env con le tue chiavi API
-  2. ./scripts/start-all.sh    → avvia Ollama + OmniRoute
-  3. Dashboard http://localhost:20128 → Providers: connetti le chiavi
-  4. ./scripts/doctor.sh       → verifica lo stack
-  5. ./scripts/chat.sh         → prima chat
-EOF
+echo ""
+echo "✅ Installazione completata."
+echo "   1. Compila .env e inserisci le chiavi anche in OmniRoute"
+echo "      (http://localhost:20128 → Providers)"
+echo "   2. ./scripts/start-all.sh   (aggiungi --no-openhands per saltare l'agente)"
+echo "   3. ./scripts/doctor.sh      per la diagnostica"

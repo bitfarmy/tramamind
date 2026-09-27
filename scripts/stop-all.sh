@@ -30,5 +30,10 @@ ferma() {
 ferma "OmniRoute" data/omniroute.pid
 ferma "Ollama" data/ollama.pid
 
+# OpenHands gira in Docker: lo ferma via container, non via PID
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^tramamind-openhands$'; then
+  docker stop tramamind-openhands >/dev/null && echo "→ OpenHands fermato (container)"
+fi
+
 echo ""
 echo "✅ Fatto."

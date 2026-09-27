@@ -1,79 +1,88 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ─────────────────────────────────────────────────────────────
-# TramaMind — avvio stack
-# Avvia (se non già attivi): Ollama → OmniRoute.
-# Scrive i PID in data/ così stop-all.sh ferma solo ciò che
-# ha avviato questo script.
+# TramaMind — Avvio dello stack
+# Uso: ./scripts/start-all.sh [--no-openhands]
 #
-# Uso: ./scripts/start-all.sh
+# Avvia Ollama (L1) e OmniRoute (L4) in background, PID in data/.
+# OpenHands (L-APP) è opzionale e gira in Docker.
+# I servizi già attivi prima NON vengono riavviati né registrati:
+# stop-all.sh ferma solo ciò che è stato avviato da qui.
 # ─────────────────────────────────────────────────────────────
-set -uo pipefail
+set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="$ROOT_DIR/.env"
-DATA_DIR="$ROOT_DIR/data"
-mkdir -p "$DATA_DIR"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" || exit 1
+mkdir -p data
 
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
-fi
+WITH_OPENHANDS=1
+[[ "${1:-}" == "--no-openhands" ]] && WITH_OPENHANDS=0
 
-OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
-TRAMAMIND_ENDPOINT="${TRAMAMIND_ENDPOINT:-http://localhost:20128/v1/chat/completions}"
-OMNIROUTE_BASE="${TRAMAMIND_ENDPOINT%/v1/chat/completions}"
+[[ -f .env ]] && { set -a; source .env; set +a; }
 
-if [[ -t 1 ]]; then
-  C_BOLD=$'\033[1m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_RESET=$'\033[0m'
+echo "🧵 TramaMind — Avvio stack"
+echo "============================"
+
+# ── L1: Ollama ───────────────────────────────────────────────
+if curl -sf http://localhost:11434/api/version >/dev/null 2>&1; then
+  echo "→ Ollama già attivo (non lo tocco)"
 else
-  C_BOLD=""; C_GREEN=""; C_YELLOW=""; C_RED=""; C_RESET=""
+  echo "→ Avvio Ollama..."
+  nohup ollama serve > data/ollama.log 2>&1 &
+  echo $! > data/ollama.pid
+  for _ in $(seq 1 15); do
+    curl -sf http://localhost:11434/api/version >/dev/null 2>&1 && break
+    sleep 1
+  done
 fi
 
-ok()   { printf '  %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$1"; }
-warn() { printf '  %s!%s %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
-bad()  { printf '  %s✗%s %s\n' "$C_RED" "$C_RESET" "$1"; }
-up()   { curl -sS --max-time 3 -o /dev/null "$1" 2>/dev/null; }
+# ── L4: OmniRoute ────────────────────────────────────────────
+# Heap V8 maggiorato: gli agenti di coding con contesti lunghi
+# saturano il default da 1 GB (FATAL ERROR oltre ~12 GiB).
+if curl -sf http://localhost:20128 >/dev/null 2>&1; then
+  echo "→ OmniRoute già attivo (non lo tocco)"
+else
+  echo "→ Avvio OmniRoute :20128..."
+  OMNIROUTE_MEMORY_MB="${OMNIROUTE_MEMORY_MB:-8192}" \
+    nohup omniroute > data/omniroute.log 2>&1 &
+  echo $! > data/omniroute.pid
+  for _ in $(seq 1 30); do
+    curl -sf http://localhost:20128 >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi
 
-printf '%sTramaMind — avvio stack%s\n' "$C_BOLD" "$C_RESET"
-
-# ── 1. Ollama (L1) ───────────────────────────────────────────
-if up "$OLLAMA_BASE_URL/api/tags"; then
-  ok "Ollama già attivo ($OLLAMA_BASE_URL) — non lo tocco"
-elif command -v ollama >/dev/null 2>&1; then
-  nohup ollama serve >"$DATA_DIR/ollama.log" 2>&1 &
-  echo $! > "$DATA_DIR/ollama.pid"
-  sleep 2
-  if up "$OLLAMA_BASE_URL/api/tags"; then
-    ok "Ollama avviato ($OLLAMA_BASE_URL, PID $(cat "$DATA_DIR/ollama.pid"))"
+# ── L-APP: OpenHands (Docker, opzionale) ─────────────────────
+if [[ "$WITH_OPENHANDS" == "1" ]]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "→ OpenHands saltato: docker non trovato"
+  elif docker ps --format '{{.Names}}' | grep -q '^tramamind-openhands$'; then
+    echo "→ OpenHands già attivo (container tramamind-openhands)"
   else
-    bad "Ollama non risponde dopo l'avvio — vedi data/ollama.log"
+    echo "→ Avvio OpenHands :3000 (Docker)..."
+    mkdir -p "${WORKSPACE_BASE:-$ROOT/workspace}"
+    docker run -d --rm \
+      --name tramamind-openhands \
+      -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:latest \
+      -e LLM_MODEL="${OPENHANDS_MODEL:-openai/auto}" \
+      -e LLM_BASE_URL="http://host.docker.internal:20128/v1" \
+      -e LLM_API_KEY="${OMNIROUTE_API_KEY:-omniroute}" \
+      -e LLM_NUM_RETRIES=2 \
+      -e LLM_TIMEOUT=300 \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v ~/.openhands:/.openhands \
+      -v "${WORKSPACE_BASE:-$ROOT/workspace}:/opt/workspace_base" \
+      -p 3000:3000 \
+      --add-host host.docker.internal:host-gateway \
+      docker.all-hands.dev/all-hands-ai/openhands:latest \
+      > data/openhands.log 2>&1
   fi
-else
-  bad "ollama non installato — vedi docs/setup.md"
 fi
 
-# ── 2. OmniRoute (L4) ────────────────────────────────────────
-if up "$OMNIROUTE_BASE/v1/models"; then
-  ok "OmniRoute già attivo ($OMNIROUTE_BASE) — non lo tocco"
-elif command -v omniroute >/dev/null 2>&1; then
-  nohup omniroute >"$DATA_DIR/omniroute.log" 2>&1 &
-  echo $! > "$DATA_DIR/omniroute.pid"
-  sleep 4
-  if up "$OMNIROUTE_BASE/v1/models"; then
-    ok "OmniRoute avviato ($OMNIROUTE_BASE, PID $(cat "$DATA_DIR/omniroute.pid"))"
-  else
-    bad "OmniRoute non risponde dopo l'avvio — vedi data/omniroute.log"
-  fi
-else
-  bad "omniroute non installato — npm install -g omniroute"
-fi
-
-# ── Riepilogo ────────────────────────────────────────────────
-printf '\n%sStato finale%s\n' "$C_BOLD" "$C_RESET"
-up "$OLLAMA_BASE_URL/api/tags"  && ok "L1 Ollama     $OLLAMA_BASE_URL"  || bad "L1 Ollama giù"
-up "$OMNIROUTE_BASE/v1/models"  && ok "L4 OmniRoute  $OMNIROUTE_BASE"   || bad "L4 OmniRoute giù"
-
-printf '\nDashboard: %s%s%s\n' "$C_BOLD" "$OMNIROUTE_BASE" "$C_RESET"
-printf 'Pronto? → %s./scripts/chat.sh%s\n' "$C_BOLD" "$C_RESET"
+echo ""
+echo "✅ Stack attivo:"
+echo "   Ollama    → http://localhost:11434"
+echo "   OmniRoute → http://localhost:20128  (dashboard + /v1)"
+[[ "$WITH_OPENHANDS" == "1" ]] && echo "   OpenHands → http://localhost:3000"
+echo ""
+echo "   Chat CLI: ./scripts/chat.sh"
+echo "   Stop:     ./scripts/stop-all.sh"

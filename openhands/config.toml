@@ -1,0 +1,52 @@
+# TramaMind — configurazione OpenHands → OmniRoute
+#
+# Posizione: ~/.openhands/config.toml (nativo/CLI). Con `docker run` o
+# docker-compose gli stessi valori arrivano dalle variabili LLM_* negli
+# script; questo file serve per installazioni native e dev mode.
+#
+# Regole chiave:
+# - Il prefisso "openai/" istruisce LiteLLM a parlare il dialetto
+#   OpenAI-compatible verso OmniRoute. Senza prefisso: errori 400 criptici.
+# - base_url punta al router (L4), MAI direttamente ai provider cloud.
+# - Failover e retry sui 429/5xx sono delegati a OmniRoute: qui teniamo
+#   i retry bassi per non sommare i backoff dei due sistemi.
+
+[core]
+workspace_base = "~/.openhands/workspace"
+# L'agente opera solo dentro la workspace: coerente con "uso personale".
+
+[llm]
+# "auto" attiva lo smart routing di OmniRoute.
+# Per forzare un locale: "openai/qwen2.5-coder:7b" (vedi docs/local-models.md).
+model = "openai/auto"
+base_url = "http://localhost:20128/v1"
+# API key generata in OmniRoute Dashboard → Endpoints (stessa di OMNIROUTE_API_KEY).
+api_key = "omniroute"
+
+# Failover gestito dal router: retry interni minimi.
+num_retries = 2
+retry_min_wait = 5
+retry_max_wait = 30
+timeout = 300
+
+# Alcuni backend locali non gradiscono lo streaming: se l'agente resta muto,
+# decommentare la riga seguente.
+# disable_streaming = true
+
+# Temperature bassa per coding: piu' deterministico. Le risposte con
+# temperature=0 vengono anche cacheate dalla cache semantica di OmniRoute.
+temperature = 0.2
+top_p = 0.95
+
+# ----------------------------------------------------------------------------
+# Profili LLM secondari (solo in dev mode via main.py/cli.py — con `docker run`
+# usare i settaggi standard qui sopra).
+# Il draft editor e' il candidato ideale per un locale piccolo: bozze di edit
+# = task semplice → gemma3:4b. Passa comunque dal router: cache semantica
+# e metriche restano centralizzate.
+# ----------------------------------------------------------------------------
+# [llm.draft_editor]
+# model = "openai/gemma3:4b"
+# base_url = "http://localhost:20128/v1"
+# api_key = "omniroute"
+# temperature = 0.2
