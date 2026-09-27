@@ -1,26 +1,15 @@
-# Segreti — MAI committare
-.env
-*.env
-!.env.example
-
-# Dati locali: log, PID, risultati benchmark
-data/
-
-# Dipendenze
+# Dipendenze / build
 node_modules/
 __pycache__/
 *.pyc
-.venv/
 
-# Modelli e pesi
-*.gguf
-*.bin
-*.safetensors
-models/
+# Dati runtime (log, PID, benchmark, richieste)
+data/
+workspace/
+*.log
 
-# OS / editor
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp
+# Config locale e segreti: MAI committare
+.env
+*.local
+**/secrets*
+**/*api_key*

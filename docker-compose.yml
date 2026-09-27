@@ -1,0 +1,91 @@
+# TramaMind — stack containerizzato (alternativa agli script nativi)
+#
+# Servizi: Ollama (L1), OmniRoute (L4), OpenHands (L-APP).
+#
+# NOTA L2: la compressione NON e' un servizio separato — e' integrata in
+# OmniRoute (pipeline RTK/Caveman + cache semantica, si attiva da
+# Dashboard → Compression). Vedi docs/compression.md.
+#
+# Uso:
+#   cp .env.example .env   # compila le chiavi
+#   docker compose up -d
+#
+# Dashboard OmniRoute: http://localhost:20128
+# OpenHands UI:        http://localhost:3000
+
+name: tramamind
+
+services:
+
+  # ---------- L1: runtime modelli locali ----------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: tramamind-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    # GPU NVIDIA (se disponibile):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ---------- L4: router / gateway ----------
+  omniroute:
+    image: diegosouzapw/omniroute:latest
+    container_name: tramamind-omniroute
+    restart: unless-stopped
+    stop_timeout: 40
+    ports:
+      - "127.0.0.1:20128:20128"
+    environment:
+      # Heap V8 maggiorato per workload agentici (default immagine: 1024)
+      OMNIROUTE_MEMORY_MB: ${OMNIROUTE_MEMORY_MB:-8192}
+    mem_limit: ${OMNIROUTE_CONTAINER_MEM:-10g}
+    volumes:
+      - omniroute-data:/app/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  # ---------- L-APP: agente di coding autonomo ----------
+  openhands:
+    image: docker.all-hands.dev/all-hands-ai/openhands:latest
+    container_name: tramamind-openhands
+    restart: unless-stopped
+    pull_policy: always
+    stdin_open: true
+    tty: true
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      SANDBOX_RUNTIME_CONTAINER_IMAGE: docker.all-hands.dev/all-hands-ai/runtime:latest
+      # LLM di OpenHands -> OmniRoute. Il prefisso openai/ seleziona il
+      # trasporto OpenAI-compatible in LiteLLM; "auto" = smart routing.
+      LLM_MODEL: ${OPENHANDS_MODEL:-openai/auto}
+      LLM_BASE_URL: http://omniroute:20128/v1
+      LLM_API_KEY: ${OMNIROUTE_API_KEY:-omniroute}
+      # Failover gestito da OmniRoute: retry interni ridotti al minimo
+      LLM_NUM_RETRIES: "2"
+      LLM_TIMEOUT: "300"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - openhands-state:/.openhands
+      - ${WORKSPACE_BASE:-./workspace}:/opt/workspace_base
+    depends_on:
+      - omniroute
+
+volumes:
+  ollama-data:
+  omniroute-data:
+  openhands-state:

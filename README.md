@@ -1,134 +1,103 @@
-# TramaMind
+# 🧵 TramaMind
 
-**IA personale multi-modello** — modelli locali (Ollama), API gratuite e Kimi dietro un unico endpoint, con routing intelligente, compressione token e cache semantica.
+IA personale multi-modello: modelli locali (Ollama), API gratuite (Google,
+Groq, NVIDIA, Cerebras, OpenRouter) e Kimi via API, orchestrati dal router
+**OmniRoute** con compressione token e cache semantica integrate.
+Claude Pro si usa solo in modo diretto, mai proxyato.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI](https://github.com/bitfarmy/tramamind/actions/workflows/ci.yml/badge.svg)](https://github.com/bitfarmy/tramamind/actions/workflows/ci.yml)
-
-TramaMind orchestra più fonti di intelligenza dietro un unico endpoint OpenAI-compatibile. Il router ([OmniRoute](https://github.com/diegosouzapw/OmniRoute), MIT) sceglie il provider migliore per ogni richiesta, fa failover automatico quando una quota finisce, comprime i prompt e risponde dalla cache quando possibile. I modelli locali hanno la priorità: privacy totale, zero costi.
-
-> ⚠️ **Uso personale.** Mai rivendita, mai automazione massiva. Vedi [docs/legal.md](docs/legal.md).
-
----
+**Licenza: MIT** — uso personale, mai rivendita né automazione massiva.
 
 ## Architettura
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ L5  INTERFACCIA — oggi: CLI (scripts/chat.sh)               │
-│     domani: desktop (fork di Berd) con pannello VRAM,       │
-│     toggle compressione, selettore modalità, provenienza    │
-└──────────────────────────┬──────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ L4  ROUTER — OmniRoute (:20128, API OpenAI-compatibile)     │
-│     19 strategie di routing · fallback a catena ·           │
-│     circuit breaker · quota tracking · dashboard web        │
-└──────────────────────────┬──────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ L2  COMPRESSIONE — integrata in OmniRoute                   │
-│     pipeline a 12 motori (RTK, Caveman, …) 15–95% token     │
-│     cache semantica a due livelli                           │
-└──────────────────────────┬──────────────────────────────────┘
-                           ▼
-┌───────────────┬─────────────────────────┬───────────────────┐
-│ L3A DIRETTO   │ L3B API GRATUITE        │ L3C MODELLI       │
-│ Claude Pro    │ Google · Groq · NVIDIA  │ LOCALI su Ollama  │
-│ (MAI proxy)   │ Cerebras · OpenRouter   │ (priorità 1)      │
-│ Kimi via API  │                         │                   │
-└───────────────┴─────────────────────────┴───────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ L1  RUNTIME — Ollama (primario) · LM Studio · llama.cpp ·   │
-│     vLLM                                                    │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ L-APP  OpenHands (agente di coding, opzionale)          │
+│        → chiama l'API di OmniRoute come un client       │
+├─────────────────────────────────────────────────────────┤
+│ L5  Interfaccia: CLI (scripts/chat.sh)                  │
+│     fase futura: app desktop (fork di Berd)             │
+├─────────────────────────────────────────────────────────┤
+│ L4  Router: OmniRoute :20128                            │
+│     smart routing (modello "auto") · failover 429/5xx   │
+│     catena: Ollama → Google → Groq → NVIDIA →           │
+│             Cerebras → OpenRouter → Kimi                │
+│     L2 integrato: compressione (RTK/Caveman/…) +        │
+│     cache semantica — nessun proxy separato             │
+├─────────────────────────────────────────────────────────┤
+│ L3A Claude Pro SOLO diretto (Claude Code CLI/claude.ai) │
+│ L3B API gratuite: Google, Groq, NVIDIA, Cerebras,       │
+│     OpenRouter · Kimi via API                           │
+│ L3C Modelli locali su Ollama :11434 (priorità 1:        │
+│     privacy totale, zero costi)                         │
+├─────────────────────────────────────────────────────────┤
+│ L1  Runtime: Ollama (primario) · LM Studio · llama.cpp  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-Dettagli in [docs/architecture.md](docs/architecture.md).
+Dettagli: [docs/architecture.md](docs/architecture.md)
 
-## Struttura del repository
-
-```
-tramamind/
-├── README.md
-├── LICENSE                  # MIT
-├── PROMPT-PROGETTO.md       # istruzioni operative per l'assistente AI
-├── .env.example             # template configurazione (copia in .env)
-├── docs/
-│   ├── architecture.md      # i 5 livelli in dettaglio
-│   ├── setup.md             # installazione e configurazione
-│   ├── local-models.md      # catalogo modelli locali verificati
-│   ├── compression.md       # compressione e cache di OmniRoute
-│   └── legal.md             # note legali e ToS
-├── desktop/                 # fork di Berd (fase futura)
-├── scripts/
-│   ├── install.sh           # setup iniziale
-│   ├── start-all.sh         # avvia Ollama + OmniRoute
-│   ├── stop-all.sh          # ferma i processi avviati da start-all
-│   ├── chat.sh              # chat CLI con provenienza risposta
-│   ├── stats.sh             # consumi, cache hit rate, risparmio
-│   └── doctor.sh            # diagnostica completa dello stack
-├── benchmarks/
-│   ├── benchmark.sh         # misure su prompt fissi (2 giri: cache)
-│   └── prompts.txt          # prompt di test rappresentativi
-└── data/                    # log, PID, risultati (gitignored)
-```
-
-## Quickstart
-
-**Requisiti:** Node 20+, Python 3.10+, Ollama, 16 GB RAM, 50 GB SSD.
+## Quick start
 
 ```bash
 git clone https://github.com/bitfarmy/tramamind.git
 cd tramamind
-./scripts/install.sh          # dipendenze + crea .env
-$EDITOR .env                  # inserisci le tue chiavi API
-./scripts/doctor.sh           # verifica che tutto sia a posto
-./scripts/start-all.sh        # avvia Ollama + OmniRoute
-./scripts/chat.sh             # chatta!
+./scripts/install.sh --pull-models --with-openhands
+# compila .env, poi inserisci le chiavi in OmniRoute (Dashboard → Providers)
+./scripts/start-all.sh
+./scripts/chat.sh "Scrivi un haiku sulla privacy"
 ```
 
-Dashboard OmniRoute: `http://localhost:20128` — API: `http://localhost:20128/v1`.
+Guida completa: [docs/setup.md](docs/setup.md)
+
+### Alternativa Docker Compose
+
+```bash
+cp .env.example .env   # compila le chiavi
+docker compose up -d
+```
 
 ## Script
 
 | Script | Cosa fa |
 |---|---|
-| `chat.sh` | Chat CLI: **provider, latenza e token** dopo ogni risposta + **alias per task** (`--code`, `--think`, `--fast`, `--write`) |
-| `stats.sh` | Consumi per provider, **cache hit rate**, stima risparmio |
-| `doctor.sh` | **Diagnostica completa**: dipendenze, servizi, chiavi, hardware |
-| `install.sh` | Setup iniziale (dipendenze, `.env`, modelli con `--pull-models`) |
-| `start-all.sh` / `stop-all.sh` | Avvio/arresto dello stack |
-| `benchmarks/benchmark.sh` | Misure su prompt fissi, due giri per la cache |
+| `scripts/install.sh` | Verifica dipendenze, crea `.env` e `data/`; `--pull-models`, `--with-openhands` |
+| `scripts/start-all.sh` | Avvia Ollama + OmniRoute (+ OpenHands, `--no-openhands` per saltarlo) |
+| `scripts/stop-all.sh` | Ferma solo ciò che ha avviato start-all |
+| `scripts/chat.sh` | REPL CLI con provenienza, latenza e token per risposta |
+| `scripts/doctor.sh` | Diagnostica completa dello stack |
+| `scripts/stats.sh` | Statistiche d'uso dai log |
+| `benchmarks/benchmark.sh` | Misura routing + compressione + cache sui tuoi prompt |
 
-## Regole d'oro
+## OpenHands (agente di coding autonomo)
 
-1. **Chiavi API solo in `.env`** (gitignored), mai in chiaro nel codice.
-2. **Claude Pro SOLO diretto** (Claude Code CLI / claude.ai), MAI proxyato — rischio ban.
-3. **Modelli locali = priorità 1**: privacy totale, zero costi.
-4. **Niente numeri non misurati**: il risparmio si misura con `benchmarks/benchmark.sh`, non si stima a priori.
-5. Uso personale, mai rivendita né automazione massiva.
+OpenHands (MIT, self-hosted) è integrato come **livello applicativo**: punta
+all'endpoint OpenAI-compatible di OmniRoute e ogni sua chiamata eredita
+routing per capability, failover e compressione — un task agentico genera
+50–200 chiamate LLM, ed è proprio il workload dove cache semantica e
+fallback fanno la differenza. UI su http://localhost:3000.
 
-## Roadmap
+Guida: [docs/openhands-integration.md](docs/openhands-integration.md)
 
-- [x] Commit zero: struttura repo + CI
-- [x] Quick win: provenienza in CLI (`chat.sh`)
-- [x] Quick win: statistiche (`stats.sh`)
-- [x] Quick win: diagnostica (`doctor.sh`)
-- [x] Alias per task (`--code`, `--think`, `--fast`, `--write`)
-- [ ] Auto-detect hardware
-- [ ] Avvio automatico
-- [ ] Benchmark A/B sulle strategie di routing
-- [ ] Documentazione inglese
-- [ ] Desktop (fork di Berd)
+## Documentazione
 
-## Crediti
+| Doc | Contenuto |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | I 5 livelli e le scelte di design |
+| [docs/setup.md](docs/setup.md) | Installazione, configurazione, problemi comuni |
+| [docs/local-models.md](docs/local-models.md) | Scelta dei modelli locali per hardware |
+| [docs/compression.md](docs/compression.md) | Pipeline di compressione e cache semantica |
+| [docs/openhands-integration.md](docs/openhands-integration.md) | Integrazione agente ↔ router |
+| [docs/legal.md](docs/legal.md) | Licenze e termini d'uso |
 
-- [OmniRoute](https://github.com/diegosouzapw/OmniRoute) — router/gateway (MIT)
-- [Ollama](https://ollama.com) — runtime modelli locali
-- Le famiglie di modelli in [docs/local-models.md](docs/local-models.md) restano dei rispettivi titolari
+## Regole inviolabili
 
-## Licenza
+1. Chiavi API solo in `.env` (gitignored), mai in chiaro nel codice
+2. Uso personale: niente rivendita né automazione massiva
+3. Modelli locali = priorità 1 (privacy totale, zero costi)
+4. Claude Pro resta fuori dal router — solo accesso diretto
+5. Niente componenti aspirazionali: se non è installabile, non è nel repo
 
-[MIT](LICENSE) © 2026 bitfarmy
+## Requisiti
+
+Node 22.22.2+ (o 24–26) · Python 3.10+ · Ollama · Docker (per OpenHands) ·
+16 GB RAM · 50 GB SSD · jq (per i benchmark)
