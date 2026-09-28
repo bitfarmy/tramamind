@@ -1,5 +1,5 @@
-# ─────────────────────────────────────────────────────────────
-# TramaMind — chat CLI (Windows, PowerShell)
+# -------------------------------------------------------------
+# TramaMind - chat CLI (Windows, PowerShell)
 # Mostra contenuto e token dopo ogni risposta. Logga in
 # data\requests.jsonl.
 #
@@ -7,7 +7,7 @@
 #   .\scripts\windows\chat.ps1                  # interattiva
 #   .\scripts\windows\chat.ps1 "una domanda"    # singolo colpo
 #   $env:TRAMAMIND_MODEL="qwen3:8b"; .\scripts\windows\chat.ps1
-# ─────────────────────────────────────────────────────────────
+# -------------------------------------------------------------
 param([string]$Prompt)
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -43,7 +43,7 @@ function Invia($testo) {
       -Headers @{ Authorization = "Bearer $Key" } `
       -ContentType 'application/json' -Body $body -TimeoutSec 120
   } catch {
-    Write-Host "✗ Errore: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[X] Errore: $($_.Exception.Message)" -ForegroundColor Red
     return
   }
   $sw.Stop()
@@ -54,7 +54,7 @@ function Invia($testo) {
   $prov = if ($res.model) { $res.model } else { $Model }
 
   Write-Host $risposta
-  Write-Host ("⚡ model={0} · {1}ms · {2} token (in {3} / out {4})" -f `
+  Write-Host ("[i] model={0} - {1}ms - {2} token (in {3} / out {4})" -f `
     $prov, $sw.ElapsedMilliseconds, ($in + $out), $in, $out) -ForegroundColor DarkGray
 
   $log = @{
@@ -67,7 +67,7 @@ function Invia($testo) {
 if ($Prompt) {
   Invia $Prompt
 } else {
-  Write-Host "🧵 TramaMind chat (modello: $Model) — 'exit' per uscire"
+  Write-Host "[*] TramaMind chat (modello: $Model) - 'exit' per uscire"
   while ($true) {
     $line = Read-Host "`ntu"
     if ($line -in 'exit', 'quit', '') { break }
