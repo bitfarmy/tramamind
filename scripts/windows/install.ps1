@@ -68,9 +68,9 @@ if ($PullModels) {
 
 # -- 5. OpenHands (opzionale) ------------------------------------
 if ($WithOpenHands) {
-  Write-Host "-> Pull immagini OpenHands..."
-  docker pull docker.all-hands.dev/all-hands-ai/openhands:latest
-  docker pull docker.all-hands.dev/all-hands-ai/runtime:latest
+  Write-Host "-> Pull immagini OpenHands (registry attuale: docker.openhands.dev + ghcr.io)..."
+  docker pull docker.openhands.dev/openhands/openhands:1.8
+  docker pull ghcr.io/openhands/agent-server:1.26.0-python
   $oh = Join-Path $env:USERPROFILE '.openhands'
   New-Item -ItemType Directory -Force $oh | Out-Null
   $cfg = Join-Path $oh 'config.toml'

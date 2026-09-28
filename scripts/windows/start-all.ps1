@@ -78,7 +78,8 @@ if (-not $NoOpenHands) {
     $key   = if ($env:OMNIROUTE_API_KEY) { $env:OMNIROUTE_API_KEY } else { 'omniroute' }
     docker run -d --rm `
       --name tramamind-openhands `
-      -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:latest `
+      -e AGENT_SERVER_IMAGE_REPOSITORY=ghcr.io/openhands/agent-server `
+      -e AGENT_SERVER_IMAGE_TAG=1.26.0-python `
       -e LLM_MODEL=$model `
       -e LLM_BASE_URL=http://host.docker.internal:20128/v1 `
       -e LLM_API_KEY=$key `
@@ -89,7 +90,7 @@ if (-not $NoOpenHands) {
       -v "${ws}:/opt/workspace_base" `
       -p 3000:3000 `
       --add-host host.docker.internal:host-gateway `
-      docker.all-hands.dev/all-hands-ai/openhands:latest | Out-File data\openhands.log
+      docker.openhands.dev/openhands/openhands:1.8 | Out-File data\openhands.log
   }
 }
 

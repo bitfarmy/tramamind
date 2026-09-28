@@ -62,7 +62,8 @@ if [[ "$WITH_OPENHANDS" == "1" ]]; then
     mkdir -p "${WORKSPACE_BASE:-$ROOT/workspace}"
     docker run -d --rm \
       --name tramamind-openhands \
-      -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:latest \
+      -e AGENT_SERVER_IMAGE_REPOSITORY=ghcr.io/openhands/agent-server \
+      -e AGENT_SERVER_IMAGE_TAG=1.26.0-python \
       -e LLM_MODEL="${OPENHANDS_MODEL:-openai/auto}" \
       -e LLM_BASE_URL="http://host.docker.internal:20128/v1" \
       -e LLM_API_KEY="${OMNIROUTE_API_KEY:-omniroute}" \
@@ -73,7 +74,7 @@ if [[ "$WITH_OPENHANDS" == "1" ]]; then
       -v "${WORKSPACE_BASE:-$ROOT/workspace}:/opt/workspace_base" \
       -p 3000:3000 \
       --add-host host.docker.internal:host-gateway \
-      docker.all-hands.dev/all-hands-ai/openhands:latest \
+      docker.openhands.dev/openhands/openhands:1.8 \
       > data/openhands.log 2>&1
   fi
 fi

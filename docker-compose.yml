@@ -60,7 +60,7 @@ services:
 
   # ---------- L-APP: agente di coding autonomo ----------
   openhands:
-    image: docker.all-hands.dev/all-hands-ai/openhands:latest
+    image: docker.openhands.dev/openhands/openhands:1.8
     container_name: tramamind-openhands
     restart: unless-stopped
     pull_policy: always
@@ -69,7 +69,8 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      SANDBOX_RUNTIME_CONTAINER_IMAGE: docker.all-hands.dev/all-hands-ai/runtime:latest
+      AGENT_SERVER_IMAGE_REPOSITORY: ghcr.io/openhands/agent-server
+      AGENT_SERVER_IMAGE_TAG: 1.26.0-python
       # LLM di OpenHands -> OmniRoute. Il prefisso openai/ seleziona il
       # trasporto OpenAI-compatible in LiteLLM; "auto" = smart routing.
       LLM_MODEL: ${OPENHANDS_MODEL:-openai/auto}
