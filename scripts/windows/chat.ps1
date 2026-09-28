@@ -10,6 +10,9 @@
 # -------------------------------------------------------------
 param([string]$Prompt)
 $ErrorActionPreference = 'Stop'
+# Console in UTF-8: senza questa riga gli accenti escono rotti (à¨, â...)
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $Root
 New-Item -ItemType Directory -Force data | Out-Null
@@ -41,7 +44,7 @@ function Invia($testo) {
   try {
     $res = Invoke-RestMethod -Uri $Endpoint -Method Post `
       -Headers @{ Authorization = "Bearer $Key" } `
-      -ContentType 'application/json' -Body $body -TimeoutSec 120
+      -ContentType 'application/json' -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 120
   } catch {
     Write-Host "[X] Errore: $($_.Exception.Message)" -ForegroundColor Red
     return
