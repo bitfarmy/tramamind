@@ -75,8 +75,8 @@ fi
 if [[ "$WITH_OPENHANDS" == "1" ]]; then
   command -v docker >/dev/null 2>&1 || { echo "✗ docker mancante (richiesto da OpenHands)"; exit 1; }
   echo "→ Pull immagini OpenHands..."
-  docker pull docker.all-hands.dev/all-hands-ai/openhands:latest
-  docker pull docker.all-hands.dev/all-hands-ai/runtime:latest
+  docker pull docker.openhands.dev/openhands/openhands:1.8
+  docker pull ghcr.io/openhands/agent-server:1.26.0-python
   mkdir -p ~/.openhands
   [[ -f ~/.openhands/config.toml ]] || cp openhands/config.toml ~/.openhands/config.toml
   echo "  ✓ OpenHands pronto (config in ~/.openhands/config.toml)"
