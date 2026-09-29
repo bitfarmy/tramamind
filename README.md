@@ -2,7 +2,7 @@
 
 IA personale multi-modello: modelli locali (Ollama), API gratuite (Google,
 Groq, NVIDIA, Cerebras, OpenRouter) e Kimi via API, orchestrati dal router
-**OmniRoute** con compressione token e cache semantica integrate.
+**OmniRoute** con compressione token (Entropy Gate) e cache semantica.
 Claude Pro si usa solo in modo diretto, mai proxyato.
 
 **Licenza: MIT** — uso personale, mai rivendita né automazione massiva.
@@ -23,8 +23,8 @@ Claude Pro si usa solo in modo diretto, mai proxyato.
 │     smart routing (modello "auto") · failover 429/5xx   │
 │     catena: Ollama → Google → Groq → NVIDIA →           │
 │             Cerebras → OpenRouter → Kimi                │
-│     L2 integrato: compressione (RTK/Caveman/…) +        │
-│     cache semantica — nessun proxy separato             │
+│ L2  Entropy Gate :9090 — compressione input, dedup      │
+│     contesto, quenching output, cache semantica (0.92)  │
 ├─────────────────────────────────────────────────────────┤
 │ L3A Claude Pro SOLO diretto (Claude Code CLI/claude.ai) │
 │ L3B API gratuite: Google, Groq, NVIDIA, Cerebras,       │
@@ -39,7 +39,7 @@ Claude Pro si usa solo in modo diretto, mai proxyato.
 
 Dettagli: [docs/architecture.md](docs/architecture.md)
 
-### Topologia hub/edge (design)
+### Topologia hub/edge (design approvato)
 
 Il sistema evolve da nodo singolo a distribuito: **hub** always-on su Oracle
 (vLLM 4B+2B, OmniRoute, Entropy Gate) e **edge** sul PC di casa (Ollama con
@@ -47,7 +47,8 @@ i 26B/27B) che si registra sull'hub via Tailscale quando è acceso. Gestione
 chiavi a cascata: keyring (desktop) → .env cifrato age (server) → env.
 Catalogo provider dichiarativo: [router/providers.yaml](router/providers.yaml).
 
-Design: [docs/hub-edge-topology.md](docs/hub-edge-topology.md)
+Spec completa: [docs/cloud-implementation.md](docs/cloud-implementation.md) ·
+Decisioni: [docs/hub-edge-topology.md](docs/hub-edge-topology.md)
 
 ## Quick start
 
@@ -153,7 +154,8 @@ solo su Claude Code CLI diretto (regola 4).
 | [docs/compression.md](docs/compression.md) | Pipeline di compressione e cache semantica |
 | [docs/openhands-integration.md](docs/openhands-integration.md) | Integrazione agente ↔ router |
 | [docs/oracle-free-tier.md](docs/oracle-free-tier.md) | Nodo always-on 24/7 su Oracle Cloud |
-| [docs/hub-edge-topology.md](docs/hub-edge-topology.md) | Design topologia distribuita hub/edge |
+| [docs/cloud-implementation.md](docs/cloud-implementation.md) | Spec implementazione ibrida hub/edge |
+| [docs/hub-edge-topology.md](docs/hub-edge-topology.md) | Registro decisioni topologia |
 | [integrations/openclaw/README.md](integrations/openclaw/README.md) | Gateway omnicanale Telegram/WhatsApp |
 | [docs/legal.md](docs/legal.md) | Licenze e termini d'uso |
 
