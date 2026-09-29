@@ -58,6 +58,21 @@ cp .env.example .env   # compila le chiavi
 docker compose up -d
 ```
 
+## Nodo always-on 24/7 (Oracle Cloud Always Free)
+
+Per usare TramaMind anche a PC spento: una VM ARM Oracle Always Free
+(**2 OCPU / 12 GB**, limiti aggiornati a giugno 2026) ospita Ollama con un
+modello leggero + OmniRoute + OpenClaw. Accesso via Tailscale, zero porte
+esposte, costo 0 €/mese. I modelli grossi restano sul PC di casa e si
+aggiungono come provider quando è acceso.
+
+```bash
+# sulla VM Oracle (Ubuntu 24.04 ARM):
+curl -fsSL https://raw.githubusercontent.com/bitfarmy/tramamind/main/scripts/oracle-setup.sh | bash
+```
+
+Guida completa: [docs/oracle-free-tier.md](docs/oracle-free-tier.md)
+
 ## Script
 
 | Script | Cosa fa |
@@ -69,6 +84,7 @@ docker compose up -d
 | `scripts/doctor.sh` | Diagnostica completa dello stack |
 | `scripts/stats.sh` | Statistiche d'uso dai log |
 | `scripts/start-openclaw.sh` | Avvia il gateway OpenClaw (dopo aver verificato OmniRoute) |
+| `scripts/oracle-setup.sh` | Provisioning VM Oracle Always Free (Docker, Ollama, UFW, swap) |
 | `benchmarks/benchmark.sh` | Misura routing + compressione + cache sui tuoi prompt |
 
 ## OpenHands (agente di coding autonomo)
@@ -87,7 +103,7 @@ OpenClaw (MIT) è integrato come **livello L5b**: un gateway che espone
 TramaMind su Telegram (e opzionalmente WhatsApp/Discord) puntando a
 OmniRoute come provider OpenAI-compatible. Routing, failover, compressione
 e cache semantica restano tutti attivi — da Telegram puoi anche forzare la
-corsia con `/model locale` (solo distillati) o `/model cloud` (solo API
+corsia con `/model locale` (solo modelli locali) o `/model cloud` (solo API
 gratuite). Gira in Docker hardened (bind su 127.0.0.1, read-only,
 sandbox per i tool); heartbeat periodico solo su modelli locali, costo zero.
 
@@ -112,6 +128,7 @@ solo su Claude Code CLI diretto (regola 4).
 | [docs/local-models.md](docs/local-models.md) | Scelta dei modelli locali per hardware |
 | [docs/compression.md](docs/compression.md) | Pipeline di compressione e cache semantica |
 | [docs/openhands-integration.md](docs/openhands-integration.md) | Integrazione agente ↔ router |
+| [docs/oracle-free-tier.md](docs/oracle-free-tier.md) | Nodo always-on 24/7 su Oracle Cloud |
 | [integrations/openclaw/README.md](integrations/openclaw/README.md) | Gateway omnicanale Telegram/WhatsApp |
 | [docs/legal.md](docs/legal.md) | Licenze e termini d'uso |
 
@@ -125,5 +142,8 @@ solo su Claude Code CLI diretto (regola 4).
 
 ## Requisiti
 
-Node 22.22.2+ (o 24–26) · Python 3.10+ · Ollama · Docker (per OpenHands e
-OpenClaw) · 16 GB RAM · 50 GB SSD · jq (per i benchmark)
+**PC principale:** Node 22.22.2+ (o 24–26) · Python 3.10+ · Ollama · Docker
+(per OpenHands e OpenClaw) · 16 GB RAM · 50 GB SSD · jq (per i benchmark)
+
+**Nodo Oracle (opzionale):** account Oracle Cloud · VM.Standard.A1.Flex
+2 OCPU / 12 GB (Always Free) · Ubuntu 24.04 ARM64
