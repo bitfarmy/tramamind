@@ -4,6 +4,10 @@
 #
 # priority: numero più basso = provato prima
 # (allineato alla fallback chain: Locale → Google → Groq → NVIDIA → Cerebras → OpenRouter → Kimi)
+#
+# ID modelli verificati il 2026-09-29. I cataloghi free cambiano spesso:
+# se una chiamata torna 404/410, controllare la dashboard del provider
+# e aggiornare questo file (un solo punto di verità).
 
 providers:
 
@@ -30,38 +34,61 @@ providers:
   google:
     env_key: GOOGLE_API_KEY
     base_url: https://generativelanguage.googleapis.com/v1beta
-    models: []   # compilare con gli ID attuali da AI Studio
+    models:
+      - gemini-3.8-flash        # GA 2026-09-02, Flash più capace (coding/agenti)
+      - gemini-3.1-flash-lite   # GA, fast lane economica
     priority: 10
     rate_limit: 1500/day
 
   groq:
     env_key: GROQ_API_KEY
     base_url: https://api.groq.com/openai/v1
-    models: []   # compilare con gli ID attuali dalla console Groq
+    # Llama 3.1/3.3 rimossi dal free tier il 2026-08-16 (enterprise-only)
+    models:
+      - openai/gpt-oss-120b     # flagship free (sostituisce Llama 3.3 70B)
+      - openai/gpt-oss-20b      # alto volume (sostituisce Llama 3.1 8B)
+      - qwen/qwen3.8-27b        # alternativa general-purpose
+      - groq/compound-mini      # compound system di Groq
     priority: 20
+    rate_limit: 30 rpm / 1000 req/day per modello
 
   nvidia:
     env_key: NVIDIA_API_KEY
     base_url: https://integrate.api.nvidia.com/v1
-    models: []
+    models:
+      - meta/llama-3.3-70b-instruct               # general-purpose consolidato
+      - nvidia/llama-3.3-nemotron-super-49b-v1.5  # reasoning/agenti
+      - qwen/qwen3-next-80b-a3b-instruct          # RAG, tool use, multi-turno
     priority: 30
 
   cerebras:
     env_key: CEREBRAS_API_KEY
     base_url: https://api.cerebras.ai/v1
-    models: []
+    # llama-3.3-70b, qwen-3-32b, llama3.1-8b e zai-glm-4.7 deprecati nel 2026
+    models:
+      - gpt-oss-120b            # unico modello production del catalogo pubblico
+      - qwen-3.8-27b            # raccomandato per Shared Inference (da 2026-09-03)
     priority: 40
+    rate_limit: ~1M token/day (free tier)
 
   openrouter:
     env_key: OPENROUTER_API_KEY
     base_url: https://openrouter.ai/api/v1
-    models: []   # solo varianti :free
+    # Solo varianti :free — catalogo verificato 2026-09-17
+    # (gli ID :free cambiano spesso: ricontrollare openrouter.ai/models)
+    models:
+      - nvidia/nemotron-3-super-120b-a12b:free   # reasoning multi-doc, 262k ctx
+      - google/gemma-4-31b-it:free               # vision + testo, 262k ctx
+      - openrouter/free                          # auto-router tra i modelli free
     priority: 50
+    rate_limit: 20 rpm / 50 req/day (1000/day con $10 di crediti)
 
   kimi:
     env_key: KIMI_API_KEY
     base_url: https://api.moonshot.ai/v1
-    models: []   # compilare con gli ID attuali da platform.moonshot.ai
+    # kimi-k2 e moonshot-v1 dismessi nel 2026: l'unico ID corrente e' kimi-k3
+    models:
+      - kimi-k3                 # 1M context, multimodale
     priority: 60
 
 # Strategia di default del router (vedi OmniRoute)
