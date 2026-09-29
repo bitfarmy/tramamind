@@ -37,7 +37,7 @@ docker logs tramamind-openclaw --follow
    ```bash
    docker compose exec openclaw-gateway node dist/index.js pairing approve telegram <CODICE>
    ```
-3. Scrivi di nubal: ti risponde TramaMind (via OmniRoute).
+3. Scrivi di nuovo al bot: ti risponde TramaMind (via OmniRoute).
 
 **Indurimento consigliato:** dopo il pairing, recupera il tuo chat ID e decommenta
 `allowFrom: ["<tuo-chat-id>"]` in `openclaw.json`, poi `docker compose restart`.
