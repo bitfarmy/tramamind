@@ -21,10 +21,11 @@ attivo) e il PC locale come **edge** per i modelli grandi.
 ┌─────────────────────────────────────────────────────────────┐
 │                     ORACLE CLOUD (HUB)                      │
 │                  Ampere A1 — 2 OCPU / 12 GB                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
-│  │  OmniRoute   │  │ Entropy Gate │  │ vLLM (Qwen3-4B)  │   │
-│  │  porta 20128 │  │  porta 9090  │  │   porta 8000     │   │
-│  └──────────────┘  └──────────────┘  └──────────────────┘   │
+│  ┌──────────────────────────┐  ┌─────────────────────────┐  │
+│  │  OmniRoute :20128        │  │ vLLM (Qwen3-4B) :8000   │  │
+│  │  L2 integrato:           │  │ CPU backend, ctx 8k     │  │
+│  │  compressione + cache    │  │                         │  │
+│  └──────────────────────────┘  └─────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │              API Gratuite (L3B)                        │ │
 │  │  Google → Groq → NVIDIA → Cerebras → OpenRouter → Kimi │ │
@@ -43,6 +44,11 @@ attivo) e il PC locale come **edge** per i modelli grandi.
 └─────────────────────────────────────────────────────────────┘
 ```
 
+> **Nota L2**: la compressione è **integrata in OmniRoute** (pipeline a 12
+> motori + cache semantica a due livelli, si attiva da Dashboard →
+> Compression). Nessun proxy separato, nessuna porta extra.
+> Dettagli: [compression.md](compression.md)
+
 ### Flusso richiesta
 
 1. Il client (desktop, OpenClaw/Telegram, CLI) invia la richiesta a OmniRoute sull'hub
@@ -50,7 +56,7 @@ attivo) e il PC locale come **edge** per i modelli grandi.
 3. **Task semplice** → Qwen3-4B locale su Oracle (latenza ~0, costo 0)
 4. **Task complesso + PC online** → instrada all'edge (Gemopus 26B / Qwopus 27B)
 5. **PC offline** → fallback API cloud gratuite
-6. Risposta → Entropy Gate (quenching + cache semantica) → client, con provenienza
+6. Risposta → compressione/cache L2 (interna a OmniRoute) → client, con provenienza
 
 ---
 
@@ -76,8 +82,7 @@ attivo) e il PC locale come **edge** per i modelli grandi.
 |------------|-----------|-----|
 | Sistema + Docker | Ubuntu 24.04 ARM64 | ~2 GB |
 | vLLM + GPT-5-Distill-Qwen3-4B (Q4) | CPU backend, ctx 8k | ~4 GB |
-| Entropy Gate | Python 3.10 | ~1 GB |
-| OmniRoute | :20128 | ~0.5 GB |
+| OmniRoute (L2 incluso) | :20128 | ~1.5 GB |
 | Buffer | — | ~4.5 GB |
 
 Modelli hub: **GPT-5-Distill-Qwen3-4B** (primario), **Gemini3.5-Code-Reasoner-2B**
@@ -106,7 +111,7 @@ applicativa (difesa in profondità).
 **Opzione pubblica (alternativa)**: Caddy come reverse proxy TLS con dominio
 proprio (`https://tramamind-hub.tuodominio.it`) + token obbligatorio su ogni
 endpoint. Da scegliere solo se serve accesso da dispositivi senza Tailscale.
-In quel caso aprire solo 80/443 nella Security List OCI — mai 20128/9090/8000.
+In quel caso aprire solo 80/443 nella Security List OCI — mai 20128/8000/11434.
 
 Token e segreti condivisi: `~/.config/tramamind/auth.yaml` cifrato con **age**.
 
@@ -136,8 +141,7 @@ tramamind keys remove google  # rimozione da tutti gli storage
 ```
 
 I provider vengono letti da [router/providers.yaml](../router/providers.yaml):
-nessun elenco hardcoded. Validazione leggera dei prefissi noti (AIza, gsk_,
-nvapi-, sk-or-…) con warning non bloccante.
+nessun elenco hardcoded.
 
 ### Risoluzione runtime (implementata: `router/config.py`)
 
@@ -173,13 +177,8 @@ edges:
 providers:
   fallback_chain: [local, edge, google, groq, nvidia, cerebras, openrouter, kimi]
 
-compression:
-  enabled: true
-  port: 9090
-  input_reduction: 0.50
-  context_dedup: 0.60
-  output_quenching: 0.75
-  semantic_cache_threshold: 0.92
+# L2: nessuna configurazione di porta — si attiva da OmniRoute Dashboard →
+# Compression (pipeline RTK/Caveman + cache semantica). Vedi compression.md
 ```
 
 ### Edge — `~/.config/tramamind/config.yaml`

@@ -2,7 +2,7 @@
 
 IA personale multi-modello: modelli locali (Ollama), API gratuite (Google,
 Groq, NVIDIA, Cerebras, OpenRouter) e Kimi via API, orchestrati dal router
-**OmniRoute** con compressione token (Entropy Gate) e cache semantica.
+**OmniRoute** con compressione token e cache semantica integrate.
 Claude Pro si usa solo in modo diretto, mai proxyato.
 
 **Licenza: MIT** — uso personale, mai rivendita né automazione massiva.
@@ -23,8 +23,8 @@ Claude Pro si usa solo in modo diretto, mai proxyato.
 │     smart routing (modello "auto") · failover 429/5xx   │
 │     catena: Ollama → Google → Groq → NVIDIA →           │
 │             Cerebras → OpenRouter → Kimi                │
-│ L2  Entropy Gate :9090 — compressione input, dedup      │
-│     contesto, quenching output, cache semantica (0.92)  │
+│     L2 integrato: compressione (RTK/Caveman/…) +        │
+│     cache semantica — nessun proxy separato             │
 ├─────────────────────────────────────────────────────────┤
 │ L3A Claude Pro SOLO diretto (Claude Code CLI/claude.ai) │
 │ L3B API gratuite: Google, Groq, NVIDIA, Cerebras,       │
@@ -42,9 +42,9 @@ Dettagli: [docs/architecture.md](docs/architecture.md)
 ### Topologia hub/edge (design approvato)
 
 Il sistema evolve da nodo singolo a distribuito: **hub** always-on su Oracle
-(vLLM 4B+2B, OmniRoute, Entropy Gate) e **edge** sul PC di casa (Ollama con
-i 26B/27B) che si registra sull'hub via Tailscale quando è acceso. Gestione
-chiavi a cascata: keyring (desktop) → .env cifrato age (server) → env.
+(vLLM 4B+2B, OmniRoute con L2 integrato) e **edge** sul PC di casa (Ollama
+con i 26B/27B) che si registra sull'hub via Tailscale quando è acceso.
+Gestione chiavi a cascata: keyring (desktop) → .env cifrato age (server) → env.
 Catalogo provider dichiarativo: [router/providers.yaml](router/providers.yaml).
 
 Spec completa: [docs/cloud-implementation.md](docs/cloud-implementation.md) ·
@@ -95,8 +95,7 @@ completo in versione leggera:
 Oracle A1 (2 OCPU / 12 GB)
 ├── Sistema + Docker        ~2 GB
 ├── vLLM (Qwen3-4B)         ~4 GB   (weights + KV cache 8k)
-├── Entropy Gate            ~1 GB
-├── OmniRoute               ~0.5 GB
+├── OmniRoute (L2 incluso)  ~1.5 GB
 └── Buffer                  ~4.5 GB
 ```
 
