@@ -65,7 +65,7 @@ docker compose exec openclaw-gateway node dist/index.js dashboard --no-open
 
 - **Claude non passa di qui.** Dopo il cambio pricing Anthropic (aprile 2026), Claude su harness di terze parti richiede billing pay-as-you-go. Claude Pro resta solo su Claude Code CLI diretto (regola 4 del progetto).
 - **Niente fallback silenziosi:** `fallbacks: []` è voluto — se OmniRoute è giù, l'errore deve essere visibile, non deviato su provider a pagamento.
-- **PC spento = gateway fermo.** Per il 24/7 serve un nodo always-on (mini PC / Raspberry Pi 5 con i modelli leggeri).
+- **PC spento = gateway fermo.** Per il 24/7 usa il nodo Oracle Cloud Always Free: vedi [docs/oracle-free-tier.md](../../docs/oracle-free-tier.md).
 - I nomi modello `auto` / `local` / `cloud` devono corrispondere al registry di OmniRoute: se OmniRoute espone nomi diversi, allinea `models.providers.tramamind.models[]`.
 - RAM minima container: **2 GB** (sotto va in OOM all'avvio).
 
