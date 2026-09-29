@@ -1,0 +1,1 @@
+"""TramaMind CLI."""
