@@ -2,25 +2,14 @@
 `tramamind keys` — gestione interattiva delle API key.
 
 I provider vengono letti da router/providers.yaml (campo env_key):
-niente elenchi hardcoded, il catalogo è unico e versionato.
+niente elenchi hardcoded, il catalogo e' unico e versionato.
 """
 from __future__ import annotations
 
 import getpass
-import sys
 from pathlib import Path
 
 from router import keystore
-
-# Prefissi noti per validazione leggera (warn, non blocco)
-KNOWN_PREFIXES = {
-    "google": "AIza",
-    "groq": "gsk_",
-    "nvidia": "nvapi-",
-    "cerebras": "csk-",
-    "openrouter": "sk-or-",
-    "kimi": "sk-",
-}
 
 
 def _load_providers() -> list[str]:
@@ -40,14 +29,6 @@ def _load_providers() -> list[str]:
     return ["google", "groq", "nvidia", "cerebras", "openrouter", "kimi"]
 
 
-def _validate(provider: str, key: str) -> bool:
-    prefix = KNOWN_PREFIXES.get(provider)
-    if prefix and not key.startswith(prefix):
-        print(f"  ⚠️  la chiave non inizia con '{prefix}' — verifica che sia quella giusta")
-        return False
-    return True
-
-
 def _pick_backend(cli_choice: str | None) -> str:
     if cli_choice:
         return cli_choice
@@ -60,7 +41,7 @@ def _pick_backend(cli_choice: str | None) -> str:
     print("\nSalvataggio:")
     options = list(labels)
     for i, b in enumerate(options, 1):
-        marker = " ← rilevato" if b == best else ""
+        marker = " <- rilevato" if b == best else ""
         print(f"  [{i}] {labels[b]}{marker}")
     raw = input(f"Scelta [{options.index(best) + 1}]: ").strip()
     if not raw:
@@ -77,7 +58,6 @@ def _ask_key(provider: str) -> str | None:
     if not key:
         print(f"  {provider}: saltato")
         return None
-    _validate(provider, key)
     return key
 
 
@@ -94,20 +74,20 @@ def cmd_add(provider: str | None, backend: str | None) -> int:
             print("Scelta non valida.")
             return 1
     if provider not in providers:
-        print(f"⚠️  '{provider}' non è nel catalogo providers.yaml — procedo comunque")
+        print(f"nota: '{provider}' non e' nel catalogo providers.yaml - procedo comunque")
 
     key = _ask_key(provider)
     if not key:
         return 1
     chosen = _pick_backend(backend)
     keystore.store_key(provider, key, chosen)
-    print(f"✓ {provider} salvata ({chosen})")
+    print(f"OK: {provider} salvata ({chosen})")
     return 0
 
 
 def cmd_setup(backend: str | None) -> int:
     providers = _load_providers()
-    print("\n🔐 TramaMind — setup API key")
+    print("\nTramaMind - setup API key")
     print("Incolla le chiavi (invio per saltare):\n")
     collected = {}
     for p in providers:
@@ -120,22 +100,22 @@ def cmd_setup(backend: str | None) -> int:
     chosen = _pick_backend(backend)
     for p, k in collected.items():
         keystore.store_key(p, k, chosen)
-    print(f"\n✓ {len(collected)} chiavi salvate ({chosen})")
-    print("Nota: le stesse chiavi vanno inserite in OmniRoute → Dashboard → Providers")
+    print(f"\nOK: {len(collected)} chiavi salvate ({chosen})")
+    print("Nota: le stesse chiavi vanno inserite in OmniRoute -> Dashboard -> Providers")
     return 0
 
 
 def cmd_list() -> int:
     providers = _load_providers()
     print(f"\n{'Provider':<14}{'Stato':<12}{'Storage':<10}Chiave")
-    print("─" * 48)
+    print("-" * 48)
     missing = 0
     for p in providers:
         key, storage = keystore.get_key(p)
         if key:
-            print(f"{p:<14}{'✓ presente':<12}{storage or '?':<10}{keystore.mask(key)}")
+            print(f"{p:<14}{'presente':<12}{storage or '?':<10}{keystore.mask(key)}")
         else:
-            print(f"{p:<14}{'✗ mancante':<12}{'—':<10}")
+            print(f"{p:<14}{'mancante':<12}{'-':<10}")
             missing += 1
     if missing:
         print(f"\n{missing} provider senza chiave: `tramamind keys add <provider>`")
@@ -145,7 +125,7 @@ def cmd_list() -> int:
 def cmd_remove(provider: str) -> int:
     removed = keystore.delete_key(provider)
     if removed:
-        print(f"✓ {provider} rimossa da: {', '.join(removed)}")
+        print(f"OK: {provider} rimossa da: {', '.join(removed)}")
     else:
         print(f"{provider}: nessuna chiave trovata")
     return 0
