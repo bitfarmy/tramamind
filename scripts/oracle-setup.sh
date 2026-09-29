@@ -3,7 +3,10 @@
 # Uso: curl -fsSL https://raw.githubusercontent.com/bitfarmy/tramamind/main/scripts/oracle-setup.sh | bash
 #
 # Allocazione RAM target (12 GB):
-#   sistema+Docker ~2GB · vLLM(Qwen3-4B) ~4GB · OmniRoute(L2 incluso) ~1.5GB · buffer ~4.5GB
+#   sistema+Docker ~2GB · modello primario ~4GB · OmniRoute(L2 incluso) ~1.5GB · buffer ~4.5GB
+#
+# I distillati sono modelli PUBBLICI su HuggingFace (autori: Jackrong, 11-47):
+# niente da caricare, la VM li scarica direttamente.
 set -euo pipefail
 
 echo "[tramamind] provisioning nodo always-on (Oracle A1.Flex, 2 OCPU / 12 GB)"
@@ -20,29 +23,36 @@ if ! command -v docker >/dev/null 2>&1; then
   sudo usermod -aG docker "$USER"
 fi
 
-# ── vLLM (CPU backend) + modelli approvati per 12 GB ──────────
-# Primario: GPT-5-Distill-Qwen3-4B (~3 GB) · Fast: Gemini3.5-Code-Reasoner-2B (~1.5 GB)
-# ESCLUSI: Qwen3.5-9B (troppo rischioso su 12 GB), Gemopus/Qwopus (solo PC locale)
-if ! python3 -c "import vllm" 2>/dev/null; then
-  echo "[tramamind] installazione vLLM (CPU backend, ARM64)..."
-  pip3 install --user vllm || {
-    echo "[tramamind] ATTENZIONE: build vLLM ARM64 fallita."
-    echo "[tramamind] Fallback: installa Ollama (curl -fsSL https://ollama.com/install.sh | sh)"
-    echo "[tramamind] e servi gli stessi pesi via Ollama. Vedi docs/oracle-free-tier.md"
-  }
-fi
+# ── Download modelli (repo HF pubblici, verificati 2026-09-29) ─
+# Primario: GPT-5-Distill-Qwen3-4B (Jackrong) — Qwen3-4B distillato su GPT-5
+# Fast:     Gemini3.5-Code-Reasoner-2B (11-47) — task veloci e heartbeat
+#
+# NOTA RUNTIME: su 2 OCPU ARM la via realistica e' GGUF via llama.cpp/Ollama
+# (Q4_K_M ~2.5 GB per il 4B). vLLM CPU con safetensors bf16 (~8 GB per il 4B)
+# sfora il budget di 12 GB: tenerlo solo come esperimento.
+pip3 install --user -q "huggingface_hub[cli]"
+HF_BIN="$HOME/.local/bin/huggingface-cli"; [[ -x "$HF_BIN" ]] || HF_BIN="huggingface-cli"
 
-# Scarica i pesi (richiede huggingface-cli login se i repo sono gated)
-if command -v huggingface-cli >/dev/null 2>&1 || pip3 install --user -q huggingface_hub; then
-  echo "[tramamind] download modelli (4B primario + 2B fast)..."
-  # TODO: sostituire con i repo HF effettivi dei distillati
-  # huggingface-cli download <org>/GPT-5-Distill-Qwen3-4B
-  # huggingface-cli download <org>/Gemini3.5-Code-Reasoner-2B
-  echo "[tramamind] (configura i repo HF dei distillati in questo script)"
+echo "[tramamind] download GGUF del primario (Q4_K_M)..."
+"$HF_BIN" download Jackrong/GPT-5-Distill-Qwen3-4B-Instruct-GGUF \
+  --include "*Q4_K_M*"
+
+echo "[tramamind] download fast lane 2B..."
+"$HF_BIN" download 11-47/Gemini3.5-Code.Reasoner-2b || \
+  echo "[tramamind] ATTENZIONE: repo 11-47/Gemini3.5-Code.Reasoner-2b non raggiungibile;"
+  echo "[tramamind] alternative: Jackrong/Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-GGUF"
+
+# ── Runtime: Ollama (default su ARM) ──────────────────────────
+if ! command -v ollama >/dev/null 2>&1; then
+  echo "[tramamind] installazione Ollama..."
+  curl -fsSL https://ollama.com/install.sh | sh
 fi
+# I GGUF scaricati si importano con:
+#   ollama create gpt-5-distill-qwen3-4b -f <Modelfile che punta al .gguf>
+# vedi docs/oracle-free-tier.md per il Modelfile di esempio.
 
 # ── Firewall: solo SSH in ingresso ────────────────────────────
-# OmniRoute (20128), vLLM (8000) e OpenClaw (18789) NON vanno esposti:
+# OmniRoute (20128), Ollama (11434) e OpenClaw (18789) NON vanno esposti:
 # l'accesso remoto avviene via Tailscale (vedi docs/oracle-free-tier.md)
 sudo ufw allow OpenSSH
 sudo ufw --force enable
@@ -68,5 +78,6 @@ echo "[tramamind] provisioning completato."
 echo "Prossimi passi:"
 echo "  1. Tailscale:  curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up"
 echo "  2. Chiavi:     compila ~/tramamind/.env con le API gratuite"
-echo "  3. Avvio:      cd ~/tramamind && ./scripts/start-all.sh && ./scripts/start-openclaw.sh"
+echo "  3. Modelli:    importa i GGUF in Ollama (vedi docs/oracle-free-tier.md)"
+echo "  4. Avvio:      cd ~/tramamind && ./scripts/start-all.sh"
 echo "  (rieloggati per usare docker senza sudo)"

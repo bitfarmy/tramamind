@@ -14,7 +14,7 @@ su Oracle Cloud, dentro i limiti Always Free.
 ```
 Oracle A1 (2 OCPU / 12 GB)
 ├── Sistema + Docker        ~2 GB
-├── vLLM (Qwen3-4B)         ~4 GB   (weights + KV cache 8k)
+├── Modello primario (GGUF) ~4 GB   (4B Q4_K_M + context 8k)
 ├── OmniRoute (L2 incluso)  ~1.5 GB
 └── Buffer                  ~4.5 GB
 ```
@@ -24,16 +24,21 @@ Oracle A1 (2 OCPU / 12 GB)
 
 ## Policy modelli sul nodo Oracle
 
-| Modello | Verdetto | Motivo |
-|---|---|---|
-| **GPT-5-Distill-Qwen3-4B** (~3 GB) | ✅ **primario** | comodo, restano ~7–8 GB liberi |
-| **Gemini3.5-Code-Reasoner-2B** (~1.5 GB) | ✅ **fast lane** | ideale per task veloci e heartbeat |
-| Qwen3.5-9B-Claude-Opus-Distill-v2 (~6 GB) | ❌ escluso | pesi + KV cache lasciano ~4–5 GB per sistema + context: troppo rischioso |
-| Gemopus 26B / Qwopus 27B | ❌ solo PC locale | 16–17 GB ciascuno, impossibili su 12 GB |
+I distillati sono **modelli pubblici della community su HuggingFace**
+(autori: Jackrong, 11-47) — niente da caricare, la VM li scarica da sola.
 
-Su Oracle il runtime è **vLLM** (CPU backend): serve il 4B come modello
-default e il 2B per i task veloci. Su ARM64, se la build vLLM dovesse dare
-problemi, il fallback documentato è llama.cpp/Ollama con gli stessi pesi.
+| Nome nel progetto | Repo HuggingFace | Verdetto |
+|---|---|---|
+| GPT-5-Distill-Qwen3-4B | `Jackrong/GPT-5-Distill-Qwen3-4B-Instruct` (+ `-GGUF`) | ✅ **primario** (GGUF Q4_K_M ~2,5 GB) |
+| Gemini3.5-Code-Reasoner-2B | `11-47/Gemini3.5-Code.Reasoner-2b` | ✅ **fast lane** (heartbeat, task veloci) |
+| Qwen3.5-9B-Claude-Opus-Distill-v2 | `Jackrong/Qwen3.5-9B-Claude-4.6-Opus-Reasoning-Distilled-v2` | ❌ escluso da Oracle (budget RAM) |
+| Gemopus 26B-A4B | `Jackrong/Gemopus-4-26B-A4B-it-GGUF` | ❌ solo PC locale (16+ GB) |
+| Qwopus 27B | `Jackrong/Qwopus3.6-27B-Coder` | ❌ solo PC locale (16+ GB) |
+
+> **Runtime su Oracle: Ollama/llama.cpp con GGUF**, non vLLM. Il 4B in
+> safetensors bf16 occupa ~8 GB e sfora il budget; il GGUF Q4_K_M ne occupa
+> ~2,5 e su CPU ARM è nettamente più veloce. vLLM resta utile solo su
+> macchine x86 con più RAM.
 
 ## PC locale (16+ GB) — modelli pesanti
 
@@ -70,8 +75,21 @@ ssh ubuntu@<IP-PUBBLICO>
 curl -fsSL https://raw.githubusercontent.com/bitfarmy/tramamind/main/scripts/oracle-setup.sh | bash
 ```
 
-Lo script installa Docker, vLLM (CPU), configura UFW (solo SSH in ingresso),
-scarica i due modelli approvati (4B + 2B) e clona il repo in `~/tramamind`.
+Lo script installa Docker e Ollama, scarica i due modelli approvati
+(4B primario in GGUF Q4_K_M + 2B fast), configura UFW (solo SSH in ingresso),
+aggiunge 4 GB di swap e clona il repo in `~/tramamind`.
+
+### Import dei GGUF in Ollama (dopo il provisioning)
+
+```bash
+cd ~/.cache/huggingface/hub/models--Jackrong--GPT-5-Distill-Qwen3-4B-Instruct-GGUF/snapshots/*/
+cat > Modelfile <<'EOF'
+FROM ./GPT-5-Distill-Qwen3-4B-Instruct_Q4_K_M.gguf
+PARAMETER num_ctx 8192
+EOF
+ollama create gpt-5-distill-qwen3-4b -f Modelfile
+ollama run gpt-5-distill-qwen3-4b "ciao"   # smoke test
+```
 
 ## 3. Rete privata con Tailscale (consigliato)
 
@@ -93,7 +111,7 @@ sudo tailscale up
 ```bash
 cd ~/tramamind
 # compila .env con le chiavi delle API gratuite (Google, Groq, NVIDIA, Cerebras, OpenRouter)
-./scripts/start-all.sh               # vLLM + OmniRoute (L2 incluso)
+./scripts/start-all.sh               # Ollama + OmniRoute (L2 incluso)
 cd integrations/openclaw
 cp .env.example .env                 # TELEGRAM_BOT_TOKEN da @BotFather
 docker compose up -d                 # gateway L5b
@@ -112,12 +130,15 @@ IP o sostituita da Tailscale SSH. **Non aprire** 20128, 8000, 11434, 18789.
 - **Niente GPU**: inferenza CPU-only su 2 OCPU ARM. Il 4B fa ~5–10 tok/s:
   ok per chat e heartbeat, non per coding intensivo — per quello ci sono le
   API gratuite nella fallback chain.
-- **KV cache contenuta**: context limitato a 8k sul nodo Oracle (è già nei
-  4 GB allocati a vLLM). Per context lunghi, il router deve preferire le API
-  cloud o il PC locale.
+- **Context contenuto**: `num_ctx 8192` sul nodo Oracle (è già nei 4 GB
+  allocati). Per context lunghi, il router deve preferire le API cloud o il
+  PC locale.
 - **ARM64**: le immagini Docker devono essere multi-arch. Se un'immagine
   manca per arm64, aggiungi `platform: linux/arm64` nel compose o cercane
   l'alternativa ARM.
+- **Licenze dei distillati**: ogni repo HF ha la sua licenza (Gemma/Qwen
+  derivate). Uso personale OK; prima di qualsiasi redistribuzione controlla
+  la model card del singolo repo. Vedi [legal.md](legal.md).
 - **"Always Free" non è un contratto**: Oracle ha già dimezzato i limiti una
   volta senza preavviso. Il budget alert a 1 $ è obbligatorio, e il repo è
   portabile: se Oracle dovesse peggiorare ancora, lo stesso setup si sposta
