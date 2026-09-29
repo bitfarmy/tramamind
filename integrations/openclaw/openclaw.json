@@ -2,7 +2,7 @@
   // ─────────────────────────────────────────────────────────────
   // TramaMind × OpenClaw — L5b gateway omnicanale
   // OpenClaw punta a OmniRoute (:20128) come provider OpenAI-compatible.
-  // L2 (compressione + cache semantica) è integrato in OmniRoute:
+  // L2 (compressione + cache semantica) e' integrato in OmniRoute:
   // nessun proxy separato da configurare.
   // Flusso: Telegram/WhatsApp → OpenClaw → OmniRoute → provider
   // ─────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@
 
   // ── Provider: OmniRoute come unico "cervello" ───────────────
   // NOTA Docker: "host.docker.internal" risolve l'host dal container.
-  // Su Linux richiede extra_hosts nel docker-compose (già incluso).
+  // Su Linux richiede extra_hosts nel docker-compose (gia incluso).
   models: {
     mode: "merge",
     providers: {
@@ -106,7 +106,7 @@
       userTimezone: "Europe/Rome",
       model: {
         primary: "tramamind/auto",
-        // Se OmniRoute è giù, niente fallback silenzioso su provider a pagamento:
+        // Se OmniRoute e' giu', niente fallback silenzioso su provider a pagamento:
         // l'errore deve essere visibile. Aggiungi fallback solo se consapevole.
         fallbacks: [],
       },

@@ -3,7 +3,7 @@
 # Uso: curl -fsSL https://raw.githubusercontent.com/bitfarmy/tramamind/main/scripts/oracle-setup.sh | bash
 #
 # Allocazione RAM target (12 GB):
-#   sistema+Docker ~2GB · vLLM(Qwen3-4B) ~4GB · Entropy Gate ~1GB · OmniRoute ~0.5GB · buffer ~4.5GB
+#   sistema+Docker ~2GB · vLLM(Qwen3-4B) ~4GB · OmniRoute(L2 incluso) ~1.5GB · buffer ~4.5GB
 set -euo pipefail
 
 echo "[tramamind] provisioning nodo always-on (Oracle A1.Flex, 2 OCPU / 12 GB)"
@@ -42,8 +42,8 @@ if command -v huggingface-cli >/dev/null 2>&1 || pip3 install --user -q huggingf
 fi
 
 # ── Firewall: solo SSH in ingresso ────────────────────────────
-# OmniRoute (20128), vLLM, Entropy Gate (9090) e OpenClaw (18789) NON vanno
-# esposti: l'accesso remoto avviene via Tailscale (vedi docs/oracle-free-tier.md)
+# OmniRoute (20128), vLLM (8000) e OpenClaw (18789) NON vanno esposti:
+# l'accesso remoto avviene via Tailscale (vedi docs/oracle-free-tier.md)
 sudo ufw allow OpenSSH
 sudo ufw --force enable
 

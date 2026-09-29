@@ -15,10 +15,12 @@ su Oracle Cloud, dentro i limiti Always Free.
 Oracle A1 (2 OCPU / 12 GB)
 ├── Sistema + Docker        ~2 GB
 ├── vLLM (Qwen3-4B)         ~4 GB   (weights + KV cache 8k)
-├── Entropy Gate            ~1 GB
-├── OmniRoute               ~0.5 GB
+├── OmniRoute (L2 incluso)  ~1.5 GB
 └── Buffer                  ~4.5 GB
 ```
+
+> L2 (compressione + cache semantica) è integrato in OmniRoute: nessun
+> servizio né budget RAM separato. Vedi [compression.md](compression.md).
 
 ## Policy modelli sul nodo Oracle
 
@@ -91,7 +93,7 @@ sudo tailscale up
 ```bash
 cd ~/tramamind
 # compila .env con le chiavi delle API gratuite (Google, Groq, NVIDIA, Cerebras, OpenRouter)
-./scripts/start-all.sh               # vLLM + Entropy Gate + OmniRoute
+./scripts/start-all.sh               # vLLM + OmniRoute (L2 incluso)
 cd integrations/openclaw
 cp .env.example .env                 # TELEGRAM_BOT_TOKEN da @BotFather
 docker compose up -d                 # gateway L5b
@@ -103,7 +105,7 @@ Poi il pairing Telegram come da [integrations/openclaw/README.md](../integration
 
 Di default la VCN Oracle ha regole restrictive: bene così. L'unica porta
 necessaria in ingresso è la **22 (SSH)** — ancora meglio se ristretta al tuo
-IP o sostituita da Tailscale SSH. **Non aprire** 20128, 11434, 18789, 9090.
+IP o sostituita da Tailscale SSH. **Non aprire** 20128, 8000, 11434, 18789.
 
 ## Limiti e avvertenze
 
