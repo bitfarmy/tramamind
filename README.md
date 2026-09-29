@@ -39,6 +39,16 @@ Claude Pro si usa solo in modo diretto, mai proxyato.
 
 Dettagli: [docs/architecture.md](docs/architecture.md)
 
+### Topologia hub/edge (design)
+
+Il sistema evolve da nodo singolo a distribuito: **hub** always-on su Oracle
+(vLLM 4B+2B, OmniRoute, Entropy Gate) e **edge** sul PC di casa (Ollama con
+i 26B/27B) che si registra sull'hub via Tailscale quando è acceso. Gestione
+chiavi a cascata: keyring (desktop) → .env cifrato age (server) → env.
+Catalogo provider dichiarativo: [router/providers.yaml](router/providers.yaml).
+
+Design: [docs/hub-edge-topology.md](docs/hub-edge-topology.md)
+
 ## Quick start
 
 ```bash
@@ -143,6 +153,7 @@ solo su Claude Code CLI diretto (regola 4).
 | [docs/compression.md](docs/compression.md) | Pipeline di compressione e cache semantica |
 | [docs/openhands-integration.md](docs/openhands-integration.md) | Integrazione agente ↔ router |
 | [docs/oracle-free-tier.md](docs/oracle-free-tier.md) | Nodo always-on 24/7 su Oracle Cloud |
+| [docs/hub-edge-topology.md](docs/hub-edge-topology.md) | Design topologia distribuita hub/edge |
 | [integrations/openclaw/README.md](integrations/openclaw/README.md) | Gateway omnicanale Telegram/WhatsApp |
 | [docs/legal.md](docs/legal.md) | Licenze e termini d'uso |
 
