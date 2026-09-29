@@ -1,0 +1,134 @@
+{
+  // ─────────────────────────────────────────────────────────────
+  // TramaMind × OpenClaw — L5b gateway omnicanale
+  // OpenClaw punta a OmniRoute (:8080) invece che direttamente a Ollama.
+  // Flusso: Telegram/WhatsApp → OpenClaw → OmniRoute → Entropy Gate → provider
+  // ─────────────────────────────────────────────────────────────
+
+  env: {
+    vars: {
+      // Chiavi SOLO qui o in .env — mai in chiaro altrove
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}",
+    },
+  },
+
+  logging: {
+    level: "info",
+    consoleLevel: "info",
+    consoleStyle: "pretty",
+  },
+
+  messages: {
+    responsePrefix: "",
+    ackReaction: "👀",
+    queue: {
+      mode: "followup",
+      cap: 20,
+      drop: "summarize",
+    },
+  },
+
+  session: {
+    scope: "per-sender",
+    dmScope: "per-channel-peer",
+    reset: { mode: "daily", atHour: 4, idleMinutes: 60 },
+    resetTriggers: ["/new", "/reset"],
+  },
+
+  // ── Canali ──────────────────────────────────────────────────
+  channels: {
+    telegram: {
+      enabled: true,
+      botToken: "${TELEGRAM_BOT_TOKEN}",
+      // Pairing: il primo che scrive riceve un codice da approvare.
+      // Dopo il pairing, restringi con il tuo chat ID:
+      // allowFrom: ["123456789"],
+      dmPolicy: "pairing",
+      groupPolicy: "allowlist",
+      groups: { "*": { requireMention: true } },
+    },
+    // whatsapp: { enabled: false, dmPolicy: "pairing" },
+    // discord:  { enabled: false },
+  },
+
+  // ── Provider: OmniRoute come unico "cervello" ───────────────
+  // NOTA Docker: "host.docker.internal" risolve l'host dal container.
+  // Su Linux richiede extra_hosts nel docker-compose (già incluso).
+  models: {
+    mode: "merge",
+    providers: {
+      tramamind: {
+        baseUrl: "http://host.docker.internal:8080/v1",
+        apiKey: "tramamind-local", // OmniRoute locale non richiede chiave
+        api: "openai-completions",
+        models: [
+          {
+            // Il router decide: Locale → Google → Groq → NVIDIA → Cerebras → OpenRouter → Kimi
+            id: "auto",
+            name: "TramaMind Auto (router)",
+            reasoning: false,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 32768,
+            maxTokens: 4096,
+          },
+          {
+            // Forza i distillati locali Ollama (privacy totale, zero costi)
+            id: "local",
+            name: "TramaMind Locale (distillati)",
+            reasoning: false,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 32768,
+            maxTokens: 4096,
+          },
+          {
+            // Forza le API gratuite cloud (bypassa i distillati)
+            id: "cloud",
+            name: "TramaMind Cloud (API gratuite)",
+            reasoning: false,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 131072,
+            maxTokens: 8192,
+          },
+        ],
+      },
+    },
+  },
+
+  // ── Agente ──────────────────────────────────────────────────
+  agents: {
+    defaults: {
+      workspace: "~/.openclaw/workspace",
+      userTimezone: "Europe/Rome",
+      model: {
+        primary: "tramamind/auto",
+        // Se OmniRoute è giù, niente fallback silenzioso su provider a pagamento:
+        // l'errore deve essere visibile. Aggiungi fallback solo se consapevole.
+        fallbacks: [],
+      },
+      models: {
+        "tramamind/auto":  { alias: "auto" },
+        "tramamind/local": { alias: "locale" },
+        "tramamind/cloud": { alias: "cloud" },
+      },
+      // Heartbeat: il maggiordomo si sveglia da solo (briefing, reminder)
+      heartbeat: {
+        every: "30m",
+        model: "tramamind/local", // heartbeat solo su distillati: costo zero
+        target: "telegram",
+        directPolicy: "allow",
+        prompt: "HEARTBEAT",
+      },
+      timeoutSeconds: 300,
+      maxConcurrent: 2,
+      // Esecuzione tool in sandbox Docker, mai sull'host direttamente
+      sandbox: {
+        mode: "non-main",
+        scope: "session",
+        workspaceRoot: "~/.openclaw/sandboxes",
+      },
+    },
+  },
+}
