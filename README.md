@@ -16,6 +16,8 @@ Claude Pro si usa solo in modo diretto, mai proxyato.
 ├─────────────────────────────────────────────────────────┤
 │ L5  Interfaccia: CLI (scripts/chat.sh)                  │
 │     fase futura: app desktop (fork di Berd)             │
+│ L5b Gateway omnicanale: OpenClaw (Telegram, opz.        │
+│     WhatsApp/Discord) → OmniRoute come provider         │
 ├─────────────────────────────────────────────────────────┤
 │ L4  Router: OmniRoute :20128                            │
 │     smart routing (modello "auto") · failover 429/5xx   │
@@ -66,6 +68,7 @@ docker compose up -d
 | `scripts/chat.sh` | REPL CLI con provenienza, latenza e token per risposta |
 | `scripts/doctor.sh` | Diagnostica completa dello stack |
 | `scripts/stats.sh` | Statistiche d'uso dai log |
+| `scripts/start-openclaw.sh` | Avvia il gateway OpenClaw (dopo aver verificato OmniRoute) |
 | `benchmarks/benchmark.sh` | Misura routing + compressione + cache sui tuoi prompt |
 
 ## OpenHands (agente di coding autonomo)
@@ -78,6 +81,28 @@ fallback fanno la differenza. UI su http://localhost:3000.
 
 Guida: [docs/openhands-integration.md](docs/openhands-integration.md)
 
+## OpenClaw (gateway Telegram / WhatsApp / Discord)
+
+OpenClaw (MIT) è integrato come **livello L5b**: un gateway che espone
+TramaMind su Telegram (e opzionalmente WhatsApp/Discord) puntando a
+OmniRoute come provider OpenAI-compatible. Routing, failover, compressione
+e cache semantica restano tutti attivi — da Telegram puoi anche forzare la
+corsia con `/model locale` (solo distillati) o `/model cloud` (solo API
+gratuite). Gira in Docker hardened (bind su 127.0.0.1, read-only,
+sandbox per i tool); heartbeat periodico solo su modelli locali, costo zero.
+
+```bash
+cd integrations/openclaw
+cp .env.example .env   # token bot Telegram da @BotFather
+docker compose up -d
+```
+
+Guida: [integrations/openclaw/README.md](integrations/openclaw/README.md)
+
+Nota: Claude **non** passa da OpenClaw — su harness di terze parti richiede
+billing pay-as-you-go (cambio Anthropic, aprile 2026). Claude Pro resta
+solo su Claude Code CLI diretto (regola 4).
+
 ## Documentazione
 
 | Doc | Contenuto |
@@ -87,6 +112,7 @@ Guida: [docs/openhands-integration.md](docs/openhands-integration.md)
 | [docs/local-models.md](docs/local-models.md) | Scelta dei modelli locali per hardware |
 | [docs/compression.md](docs/compression.md) | Pipeline di compressione e cache semantica |
 | [docs/openhands-integration.md](docs/openhands-integration.md) | Integrazione agente ↔ router |
+| [integrations/openclaw/README.md](integrations/openclaw/README.md) | Gateway omnicanale Telegram/WhatsApp |
 | [docs/legal.md](docs/legal.md) | Licenze e termini d'uso |
 
 ## Regole inviolabili
@@ -99,5 +125,5 @@ Guida: [docs/openhands-integration.md](docs/openhands-integration.md)
 
 ## Requisiti
 
-Node 22.22.2+ (o 24–26) · Python 3.10+ · Ollama · Docker (per OpenHands) ·
-16 GB RAM · 50 GB SSD · jq (per i benchmark)
+Node 22.22.2+ (o 24–26) · Python 3.10+ · Ollama · Docker (per OpenHands e
+OpenClaw) · 16 GB RAM · 50 GB SSD · jq (per i benchmark)

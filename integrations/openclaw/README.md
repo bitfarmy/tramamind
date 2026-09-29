@@ -1,14 +1,14 @@
 # TramaMind × OpenClaw — Gateway omnicanale (L5b)
 
-OpenClaw espone TramaMind su Telegram (e opzionalmente WhatsApp/Discord) senza toccare lo stack esistente: punta a **OmniRoute** come provider OpenAI-compatible, quindi compressione (Entropy Gate), routing, failover e distillati restano tutti attivi.
+OpenClaw espone TramaMind su Telegram (e opzionalmente WhatsApp/Discord) senza toccare lo stack esistente: punta a **OmniRoute** come provider OpenAI-compatible, quindi routing, failover, compressione e cache semantica (L2, integrati in OmniRoute) restano tutti attivi.
 
 ```
-Tu (Telegram) → OpenClaw :18789 → OmniRoute :8080 → Entropy Gate :9090 → provider
+Tu (Telegram) → OpenClaw :18789 → OmniRoute :20128 → provider
 ```
 
 ## Prerequisiti
 
-- Stack TramaMind avviato: OmniRoute su `localhost:8080` (e Ollama su `11434` per i distillati)
+- Stack TramaMind avviato: OmniRoute su `localhost:20128` (e Ollama su `11434` per i modelli locali)
 - Docker + Docker Compose
 - Un bot Telegram: parla con **@BotFather** → `/newbot` → copia il token
 
@@ -47,7 +47,7 @@ docker logs tramamind-openclaw --follow
 | Comando in chat | Effetto |
 |---|---|
 | messaggio qualsiasi | risposta via `tramamind/auto` (router decide) |
-| `/model locale` | forza i distillati Ollama (privacy totale, costo zero) |
+| `/model locale` | forza i modelli locali Ollama (privacy totale, costo zero) |
 | `/model cloud` | forza le API gratuite |
 | `/model auto` | torna al routing automatico |
 | `/new` o `/reset` | nuova sessione |
@@ -63,9 +63,9 @@ docker compose exec openclaw-gateway node dist/index.js dashboard --no-open
 
 ## Note e limiti
 
-- **Claude non passa di qui.** Dopo il cambio pricing Anthropic (aprile 2026), Claude su harness di terze parti richiede billing pay-as-you-go. Claude Pro resta solo su Claude Code CLI diretto (regola L3A).
+- **Claude non passa di qui.** Dopo il cambio pricing Anthropic (aprile 2026), Claude su harness di terze parti richiede billing pay-as-you-go. Claude Pro resta solo su Claude Code CLI diretto (regola 4 del progetto).
 - **Niente fallback silenziosi:** `fallbacks: []` è voluto — se OmniRoute è giù, l'errore deve essere visibile, non deviato su provider a pagamento.
-- **PC spento = gateway fermo.** Per il 24/7 serve il nodo always-on (vedi `docs/setup.md`).
+- **PC spento = gateway fermo.** Per il 24/7 serve un nodo always-on (mini PC / Raspberry Pi 5 con i modelli leggeri).
 - I nomi modello `auto` / `local` / `cloud` devono corrispondere al registry di OmniRoute: se OmniRoute espone nomi diversi, allinea `models.providers.tramamind.models[]`.
 - RAM minima container: **2 GB** (sotto va in OOM all'avvio).
 
@@ -74,6 +74,6 @@ docker compose exec openclaw-gateway node dist/index.js dashboard --no-open
 | Sintomo | Causa probabile | Fix |
 |---|---|---|
 | Container esce subito (exit 137) | RAM < 2 GB | alza `mem_limit` |
-| Il bot non risponde | OmniRoute non raggiungibile dal container | verifica `extra_hosts` e che OmniRoute ascolti su `0.0.0.0` o sia sull'host |
+| Il bot non risponde | OmniRoute non raggiungibile dal container | verifica `extra_hosts` e che OmniRoute sia in ascolto sull'host (`curl http://localhost:20128/v1/models`) |
 | Nessun pairing code | token Telegram errato | rigenera da @BotFather, aggiorna `.env` |
-| Risposte lente al primo messaggio | distillato in caricamento su Ollama | normale cold start, poi va in cache |
+| Risposte lente al primo messaggio | modello in caricamento su Ollama | normale cold start, poi va in cache |

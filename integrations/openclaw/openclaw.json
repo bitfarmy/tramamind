@@ -1,8 +1,10 @@
 {
   // ─────────────────────────────────────────────────────────────
   // TramaMind × OpenClaw — L5b gateway omnicanale
-  // OpenClaw punta a OmniRoute (:8080) invece che direttamente a Ollama.
-  // Flusso: Telegram/WhatsApp → OpenClaw → OmniRoute → Entropy Gate → provider
+  // OpenClaw punta a OmniRoute (:20128) come provider OpenAI-compatible.
+  // L2 (compressione + cache semantica) è integrato in OmniRoute:
+  // nessun proxy separato da configurare.
+  // Flusso: Telegram/WhatsApp → OpenClaw → OmniRoute → provider
   // ─────────────────────────────────────────────────────────────
 
   env: {
@@ -58,12 +60,12 @@
     mode: "merge",
     providers: {
       tramamind: {
-        baseUrl: "http://host.docker.internal:8080/v1",
+        baseUrl: "http://host.docker.internal:20128/v1",
         apiKey: "tramamind-local", // OmniRoute locale non richiede chiave
         api: "openai-completions",
         models: [
           {
-            // Il router decide: Locale → Google → Groq → NVIDIA → Cerebras → OpenRouter → Kimi
+            // Il router decide: Ollama → Google → Groq → NVIDIA → Cerebras → OpenRouter → Kimi
             id: "auto",
             name: "TramaMind Auto (router)",
             reasoning: false,
@@ -73,9 +75,9 @@
             maxTokens: 4096,
           },
           {
-            // Forza i distillati locali Ollama (privacy totale, zero costi)
+            // Forza i modelli locali Ollama (privacy totale, zero costi)
             id: "local",
-            name: "TramaMind Locale (distillati)",
+            name: "TramaMind Locale (Ollama)",
             reasoning: false,
             input: ["text"],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -83,7 +85,7 @@
             maxTokens: 4096,
           },
           {
-            // Forza le API gratuite cloud (bypassa i distillati)
+            // Forza le API gratuite cloud (bypassa i modelli locali)
             id: "cloud",
             name: "TramaMind Cloud (API gratuite)",
             reasoning: false,
@@ -113,10 +115,10 @@
         "tramamind/local": { alias: "locale" },
         "tramamind/cloud": { alias: "cloud" },
       },
-      // Heartbeat: il maggiordomo si sveglia da solo (briefing, reminder)
+      // Heartbeat: si sveglia da solo (briefing, reminder)
       heartbeat: {
         every: "30m",
-        model: "tramamind/local", // heartbeat solo su distillati: costo zero
+        model: "tramamind/local", // heartbeat solo su modelli locali: costo zero
         target: "telegram",
         directPolicy: "allow",
         prompt: "HEARTBEAT",
