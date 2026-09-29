@@ -1,6 +1,6 @@
-# TramaMind — installazione CLI su Windows (tutto automatico)
+# TramaMind - installazione CLI su Windows (tutto automatico)
 # Uso:  powershell -ExecutionPolicy Bypass -File scripts\install-cli.ps1
-# Fa tre cose: pip install -e . · aggiunge Scripts al PATH · verifica
+# Fa tre cose: pip install -e . - aggiunge Scripts al PATH - verifica
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
@@ -20,7 +20,7 @@ if ($UserPath -notlike "*$ScriptsDir*") {
     [Environment]::SetEnvironmentVariable('Path', "$UserPath;$ScriptsDir", 'User')
     Write-Host "[tramamind] aggiunto al PATH utente (permanente)" -ForegroundColor Yellow
 } else {
-    Write-Host "[tramamind] PATH già a posto"
+    Write-Host "[tramamind] PATH gia a posto"
 }
 
 # Rendi il PATH effettivo in QUESTA sessione (niente riavvio necessario)
@@ -32,8 +32,8 @@ $exe = Join-Path $ScriptsDir "tramamind.exe"
 if (Test-Path $exe) {
     & tramamind keys list
     Write-Host ""
-    Write-Host "[tramamind] OK — da ora puoi usare: tramamind keys setup" -ForegroundColor Green
-    Write-Host "(nelle NUOVE finestre di PowerShell funzionerà senza altri passaggi)"
+    Write-Host "[tramamind] OK - da ora puoi usare: tramamind keys setup" -ForegroundColor Green
+    Write-Host "(nelle NUOVE finestre di PowerShell funzionera senza altri passaggi)"
 } else {
     Write-Host "ERRORE: tramamind.exe non trovato in $ScriptsDir" -ForegroundColor Red
     exit 1
