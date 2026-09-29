@@ -112,7 +112,7 @@ Token e segreti condivisi: `~/.config/tramamind/auth.yaml` cifrato con **age**.
 
 ---
 
-## 5. Gestione API key — tre livelli
+## 5. Gestione API key — tre livelli ✅ (fase 2 implementata)
 
 ```
 1. Keyring di sistema (consigliato su desktop)
@@ -125,26 +125,27 @@ Token e segreti condivisi: `~/.config/tramamind/auth.yaml` cifrato con **age**.
 ⚠️ Su Linux headless il keyring non ha backend: la cascata parte dal livello 2.
 La CLI lo rileva e propone automaticamente l'opzione giusta.
 
-### CLI: `tramamind keys`
+### CLI: `tramamind keys` (implementata: `cli/keys.py`)
 
 ```bash
-tramamind keys add google     # singola chiave
+pip install -e .
 tramamind keys setup          # wizard interattivo tutti i provider
-tramamind keys list           # stato: valida/mancante + storage usato
+tramamind keys add google     # singola chiave
+tramamind keys list           # stato: presente/mancante + storage (mascherata)
+tramamind keys remove google  # rimozione da tutti gli storage
 ```
 
-### Risoluzione runtime (cascata)
+I provider vengono letti da [router/providers.yaml](../router/providers.yaml):
+nessun elenco hardcoded. Validazione leggera dei prefissi noti (AIza, gsk_,
+nvapi-, sk-or-…) con warning non bloccante.
+
+### Risoluzione runtime (implementata: `router/config.py`)
 
 ```python
-# router/config.py — keyring → file cifrato → env (Docker/CI)
-def get_api_key(self, provider: str) -> str | None:
-    key = keyring.get_password("tramamind", provider)   # 1
-    if key: return key
-    # 2. ~/.config/tramamind/.env (decifrato da age)
-    # 3. os.getenv(f"{provider.upper()}_API_KEY")
+from router.config import get_settings
+settings = get_settings()              # TRAMAMIND_NODE_ROLE/HUB_URL/EDGE_TOKEN
+key = settings.get_api_key("groq")     # keyring → age → .env → env
 ```
-
-Catalogo provider: [router/providers.yaml](../router/providers.yaml)
 
 ---
 
@@ -213,12 +214,12 @@ ollama:
 ```bash
 # Hub
 curl -fsSL https://raw.githubusercontent.com/bitfarmy/tramamind/main/scripts/oracle-setup.sh | bash
-tramamind keys setup && tramamind topology init hub
+pip install -e ~/tramamind && tramamind keys setup
 
 # Edge
 curl -fsSL https://ollama.com/install.sh | sh
 ollama pull gemopus-26b-a4b && ollama pull qwopus-27b-v3
-tramamind keys setup && tramamind topology init edge
+pip install -e . && tramamind keys setup
 ```
 
 ---
@@ -228,8 +229,8 @@ tramamind keys setup && tramamind topology init edge
 | Fase | Stato | Descrizione |
 |------|-------|-------------|
 | 1 | ✅ Fatto | Architettura, limiti Oracle, providers.yaml, integrazione OpenClaw |
-| 2 | 🔄 Prossima | `router/config.py` (cascata chiavi) + CLI `tramamind keys` |
-| 3 | ⏳ | `topology/hub.py`, `topology/edge.py`, endpoint registrazione |
+| 2 | ✅ Fatto | `router/config.py` + `router/keystore.py` + CLI `tramamind keys` (testata) |
+| 3 | 🔄 Prossima | `topology/hub.py`, `topology/edge.py`, endpoint registrazione |
 | 4 | ⏳ | `deploy/docker-compose.hub.yml` / `.edge.yml`, install-hub/edge.sh |
 | 5 | ⏳ | Desktop client remoto con indicatori di provenienza |
 | 6 | ⏳ | Benchmark latenza/costo hub vs edge vs cloud |

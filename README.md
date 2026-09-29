@@ -70,6 +70,21 @@ cp .env.example .env   # compila le chiavi
 docker compose up -d
 ```
 
+## CLI `tramamind` — gestione chiavi
+
+```bash
+pip install -e .          # installa la CLI dal repo
+
+tramamind keys setup      # wizard interattivo per tutti i provider
+tramamind keys add groq   # singola chiave
+tramamind keys list       # stato (mascherato) + storage usato
+tramamind keys remove groq
+```
+
+Storage a cascata con rilevamento automatico: **keyring** di sistema su
+desktop, **age** cifrato su server headless, `.env` plain solo per sviluppo.
+I provider vengono letti da `router/providers.yaml` — niente elenchi hardcoded.
+
 ## Nodo always-on 24/7 (Oracle Cloud Always Free)
 
 Per usare TramaMind anche a PC spento: una VM ARM Oracle Always Free
