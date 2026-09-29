@@ -33,6 +33,7 @@ Claude Pro si usa solo in modo diretto, mai proxyato.
 │     privacy totale, zero costi)                         │
 ├─────────────────────────────────────────────────────────┤
 │ L1  Runtime: Ollama (primario) · LM Studio · llama.cpp  │
+│     vLLM sul nodo Oracle (CPU backend)                  │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -61,10 +62,23 @@ docker compose up -d
 ## Nodo always-on 24/7 (Oracle Cloud Always Free)
 
 Per usare TramaMind anche a PC spento: una VM ARM Oracle Always Free
-(**2 OCPU / 12 GB**, limiti aggiornati a giugno 2026) ospita Ollama con un
-modello leggero + OmniRoute + OpenClaw. Accesso via Tailscale, zero porte
-esposte, costo 0 €/mese. I modelli grossi restano sul PC di casa e si
-aggiungono come provider quando è acceso.
+(**2 OCPU / 12 GB**, limiti aggiornati a giugno 2026) ospita lo stack
+completo in versione leggera:
+
+```
+Oracle A1 (2 OCPU / 12 GB)
+├── Sistema + Docker        ~2 GB
+├── vLLM (Qwen3-4B)         ~4 GB   (weights + KV cache 8k)
+├── Entropy Gate            ~1 GB
+├── OmniRoute               ~0.5 GB
+└── Buffer                  ~4.5 GB
+```
+
+Modelli sul nodo: **GPT-5-Distill-Qwen3-4B** (primario) e
+**Gemini3.5-Code-Reasoner-2B** (task veloci/heartbeat). Esclusi: Qwen3.5-9B
+(troppo rischioso su 12 GB) e i 26B/27B (solo PC locale, raggiungibili via
+Tailscale quando il PC è acceso). Accesso via Tailscale, zero porte esposte,
+costo 0 €/mese.
 
 ```bash
 # sulla VM Oracle (Ubuntu 24.04 ARM):
@@ -84,7 +98,7 @@ Guida completa: [docs/oracle-free-tier.md](docs/oracle-free-tier.md)
 | `scripts/doctor.sh` | Diagnostica completa dello stack |
 | `scripts/stats.sh` | Statistiche d'uso dai log |
 | `scripts/start-openclaw.sh` | Avvia il gateway OpenClaw (dopo aver verificato OmniRoute) |
-| `scripts/oracle-setup.sh` | Provisioning VM Oracle Always Free (Docker, Ollama, UFW, swap) |
+| `scripts/oracle-setup.sh` | Provisioning VM Oracle Always Free (Docker, vLLM, UFW, swap) |
 | `benchmarks/benchmark.sh` | Misura routing + compressione + cache sui tuoi prompt |
 
 ## OpenHands (agente di coding autonomo)
