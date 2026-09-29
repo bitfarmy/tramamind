@@ -1,0 +1,73 @@
+# TramaMind — catalogo provider (versionato, SENZA segreti)
+# Le chiavi non vivono qui: vengono risolte a runtime da keyring / .env
+# cifrato (age) / variabili ambiente. Vedi docs/hub-edge-topology.md
+#
+# priority: numero più basso = provato prima
+# (allineato alla fallback chain: Locale → Google → Groq → NVIDIA → Cerebras → OpenRouter → Kimi)
+
+providers:
+
+  # ── L3C · Locale (priorità massima: privacy totale, zero costi) ──
+  local_ollama:
+    env_key: null
+    base_url: http://localhost:11434/v1
+    role: [standalone, edge]
+    models: [gemopus-26b, qwopus-27b, qwen3.5-9b-claude-opus-distill-v2]
+    priority: 1
+
+  # ── Hub Oracle (nodo always-on, raggiunto via Tailscale) ──
+  hub_vllm:
+    env_key: TRAMAMIND_HUB_TOKEN   # auth applicativa tra nodi
+    base_url: http://localhost:8000/v1   # vLLM sull'hub (locale al router)
+    role: [hub]
+    models: [gpt-5-distill-qwen3-4b, gemini3.5-code-reasoner-2b]
+    priority: 5   # dopo locale, prima del cloud
+    notes: >
+      Su Oracle A1.Flex 12 GB: 4B primario + 2B fast lane.
+      Il 9B è escluso (budget RAM). Context max 8k (KV cache contenuta).
+
+  # ── L3B · API gratuite ──
+  google:
+    env_key: GOOGLE_API_KEY
+    base_url: https://generativelanguage.googleapis.com/v1beta
+    models: []   # compilare con gli ID attuali da AI Studio
+    priority: 10
+    rate_limit: 1500/day
+
+  groq:
+    env_key: GROQ_API_KEY
+    base_url: https://api.groq.com/openai/v1
+    models: []   # compilare con gli ID attuali dalla console Groq
+    priority: 20
+
+  nvidia:
+    env_key: NVIDIA_API_KEY
+    base_url: https://integrate.api.nvidia.com/v1
+    models: []
+    priority: 30
+
+  cerebras:
+    env_key: CEREBRAS_API_KEY
+    base_url: https://api.cerebras.ai/v1
+    models: []
+    priority: 40
+
+  openrouter:
+    env_key: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+    models: []   # solo varianti :free
+    priority: 50
+
+  kimi:
+    env_key: KIMI_API_KEY
+    base_url: https://api.moonshot.ai/v1
+    models: []   # compilare con gli ID attuali da platform.moonshot.ai
+    priority: 60
+
+# Strategia di default del router (vedi OmniRoute)
+router:
+  strategy: capability_based   # capability_based | cost_first | quality_first | latency_first | round_robin
+  failover:
+    on: [429, 500, 502, 503, 504]
+    backoff: exponential
+    max_retries: 3
