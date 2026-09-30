@@ -33,7 +33,7 @@ Claude Pro si usa solo in modo diretto, mai proxyato.
 │     privacy totale, zero costi)                         │
 ├─────────────────────────────────────────────────────────┤
 │ L1  Runtime: Ollama (primario) · LM Studio · llama.cpp  │
-│     vLLM sul nodo Oracle (CPU backend)                  │
+│     sul nodo Oracle: Ollama con GGUF (CPU ARM)          │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -42,8 +42,9 @@ Dettagli: [docs/architecture.md](docs/architecture.md)
 ### Topologia hub/edge (design approvato)
 
 Il sistema evolve da nodo singolo a distribuito: **hub** always-on su Oracle
-(vLLM 4B+2B, OmniRoute con L2 integrato) e **edge** sul PC di casa (Ollama
-con i 26B/27B) che si registra sull'hub via Tailscale quando è acceso.
+(Ollama con GGUF 9B/4B/2B, OmniRoute con L2 integrato) e **edge** sul PC di
+casa (Ollama con i 26B/27B) che si registra sull'hub via Tailscale quando è
+acceso.
 Gestione chiavi a cascata: keyring (desktop) → .env cifrato age (server) → env.
 Catalogo provider dichiarativo: [router/providers.yaml](router/providers.yaml).
 
@@ -88,21 +89,26 @@ I provider vengono letti da `router/providers.yaml` — niente elenchi hardcoded
 ## Nodo always-on 24/7 (Oracle Cloud Always Free)
 
 Per usare TramaMind anche a PC spento: una VM ARM Oracle Always Free
-(**2 OCPU / 12 GB**, limiti aggiornati a giugno 2026) ospita lo stack
-completo in versione leggera:
+ospita lo stack completo. I limiti dipendono dall'account: le tenancy
+Pay-As-You-Go (come la nostra, verificato 2026-09-29) mantengono
+**4 OCPU / 24 GB**; gli account free-only creati dopo giugno 2026 hanno
+2 OCPU / 12 GB. Con 24 GB:
 
 ```
-Oracle A1 (2 OCPU / 12 GB)
+Oracle A1 (4 OCPU / 24 GB)
 ├── Sistema + Docker        ~2 GB
-├── vLLM (Qwen3-4B)         ~4 GB   (weights + KV cache 8k)
+├── Ollama 9B (GGUF Q4)     ~7 GB   primario, ctx 8k
+├── Ollama 4B + 2B (GGUF)   ~5 GB   co-caricabili (keep-alive)
 ├── OmniRoute (L2 incluso)  ~1.5 GB
-└── Buffer                  ~4.5 GB
+└── Buffer                  ~9 GB
 ```
 
-Modelli sul nodo: **GPT-5-Distill-Qwen3-4B** (primario) e
-**Gemini3.5-Code-Reasoner-2B** (task veloci/heartbeat). Esclusi: Qwen3.5-9B
-(troppo rischioso su 12 GB) e i 26B/27B (solo PC locale, raggiungibili via
-Tailscale quando il PC è acceso). Accesso via Tailscale, zero porte esposte,
+Modelli sul nodo (GGUF via Ollama): **Qwen3.5-9B-Claude-Opus-Distill-v2**
+(primario), **GPT-5-Distill-Qwen3-4B** (bilanciato) e
+**Gemini3.5-Code-Reasoner-2B** (task veloci/heartbeat). I 26B/27B restano
+solo sul PC locale, raggiungibili via Tailscale quando è acceso.
+Se il tuo account ha 12 GB invece di 24: escludi il 9B e usa 4B+2B
+(vedi docs/oracle-free-tier.md). Accesso via Tailscale, zero porte esposte,
 costo 0 €/mese.
 
 ```bash
@@ -123,7 +129,7 @@ Guida completa: [docs/oracle-free-tier.md](docs/oracle-free-tier.md)
 | `scripts/doctor.sh` | Diagnostica completa dello stack |
 | `scripts/stats.sh` | Statistiche d'uso dai log |
 | `scripts/start-openclaw.sh` | Avvia il gateway OpenClaw (dopo aver verificato OmniRoute) |
-| `scripts/oracle-setup.sh` | Provisioning VM Oracle Always Free (Docker, vLLM, UFW, swap) |
+| `scripts/oracle-setup.sh` | Provisioning VM Oracle Always Free (Docker, Ollama, modelli GGUF, UFW, swap) |
 | `benchmarks/benchmark.sh` | Misura routing + compressione + cache sui tuoi prompt |
 
 ## OpenHands (agente di coding autonomo)
@@ -187,4 +193,4 @@ solo su Claude Code CLI diretto (regola 4).
 (per OpenHands e OpenClaw) · 16 GB RAM · 50 GB SSD · jq (per i benchmark)
 
 **Nodo Oracle (opzionale):** account Oracle Cloud · VM.Standard.A1.Flex
-2 OCPU / 12 GB (Always Free) · Ubuntu 24.04 ARM64
+fino a 4 OCPU / 24 GB (Always Free) · Ubuntu 24.04 ARM64
