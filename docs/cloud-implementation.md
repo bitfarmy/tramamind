@@ -20,11 +20,11 @@ attivo) e il PC locale come **edge** per i modelli grandi.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     ORACLE CLOUD (HUB)                      │
-│                  Ampere A1 — 2 OCPU / 12 GB                 │
+│                  Ampere A1 — 4 OCPU / 24 GB                 │
 │  ┌──────────────────────────┐  ┌─────────────────────────┐  │
-│  │  OmniRoute :20128        │  │ vLLM (Qwen3-4B) :8000   │  │
-│  │  L2 integrato:           │  │ CPU backend, ctx 8k     │  │
-│  │  compressione + cache    │  │                         │  │
+│  │  OmniRoute :20128        │  │ Ollama :11434 (GGUF)    │  │
+│  │  L2 integrato:           │  │ 9B primario · 4B · 2B   │  │
+│  │  compressione + cache    │  │ ctx 8k, keep-alive      │  │
 │  └──────────────────────────┘  └─────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │              API Gratuite (L3B)                        │ │
@@ -53,7 +53,7 @@ attivo) e il PC locale come **edge** per i modelli grandi.
 
 1. Il client (desktop, OpenClaw/Telegram, CLI) invia la richiesta a OmniRoute sull'hub
 2. OmniRoute classifica il task e verifica i modelli disponibili
-3. **Task semplice** → Qwen3-4B locale su Oracle (latenza ~0, costo 0)
+3. **Task semplice** → distillati locali su Oracle via Ollama (9B/4B/2B, costo 0)
 4. **Task complesso + PC online** → instrada all'edge (Gemopus 26B / Qwopus 27B)
 5. **PC offline** → fallback API cloud gratuite
 6. Risposta → compressione/cache L2 (interna a OmniRoute) → client, con provenienza
@@ -64,33 +64,39 @@ attivo) e il PC locale come **edge** per i modelli grandi.
 
 | Risorsa | Limite | Utilizzo TramaMind |
 |---------|--------|-------------------|
-| Ampere A1 | 2 OCPU / 12 GB RAM | vLLM 4B + servizi |
+| Ampere A1 | fino a 4 OCPU / 24 GB RAM | Ollama GGUF (9B+4B+2B) + servizi |
 | Storage | 200 GB totali | 100 GB boot volume: modelli + log + cache |
 | Egress | 10 TB/mese | Mai raggiungibile per uso personale |
 | IP pubblico | 1 incluso | Statico, assegnato alla VM |
 
-> Dal 15 giugno 2026 i limiti Always Free sono 2 OCPU/12 GB (prima 4/24).
+> Dal 15 giugno 2026 gli account **free-only** hanno 2 OCPU/12 GB; le
+> tenancy **PAYG** mantengono 4 OCPU/24 GB gratuiti (verificato sul nostro
+> account il 2026-09-29, banner in console: 3.000 OCPU-ore + 18.000 GB-ore).
 > Budget alert a 1 $ obbligatorio. Dettagli: [oracle-free-tier.md](oracle-free-tier.md)
 
 ---
 
 ## 3. Stack tecnico
 
-### Hub (Oracle) — budget RAM 12 GB
+### Hub (Oracle) — budget RAM 24 GB (account PAYG)
 
 | Componente | Tecnologia | RAM |
 |------------|-----------|-----|
 | Sistema + Docker | Ubuntu 24.04 ARM64 | ~2 GB |
-| vLLM + GPT-5-Distill-Qwen3-4B (Q4) | CPU backend, ctx 8k | ~4 GB |
+| Ollama + Qwen3.5-9B-Claude-Opus-Distill-v2 (GGUF Q4_K_M) | ctx 8k | ~7 GB |
+| Ollama + GPT-5-Distill-Qwen3-4B e Gemini3.5-Code-Reasoner-2B | co-caricabili, keep-alive | ~5 GB |
 | OmniRoute (L2 incluso) | :20128 | ~1.5 GB |
-| Buffer | — | ~4.5 GB |
+| Buffer | — | ~9 GB |
 
-Modelli hub: **GPT-5-Distill-Qwen3-4B** (primario), **Gemini3.5-Code-Reasoner-2B**
-(fast lane/heartbeat). Esclusi: Qwen3.5-9B (budget RAM), 26B/27B (solo edge).
+Modelli hub: **Qwen3.5-9B-Claude-Opus-Distill-v2** (primario),
+**GPT-5-Distill-Qwen3-4B** (bilanciato), **Gemini3.5-Code-Reasoner-2B**
+(fast lane/heartbeat). Esclusi: 26B/27B (solo edge).
+Su account free-only (12 GB): niente 9B, budget come da
+[oracle-free-tier.md](oracle-free-tier.md).
 
-⚠️ **vLLM su ARM64**: l'immagine ufficiale `vllm/vllm-openai` è x86-only.
-Su A1.Flex: build da sorgente con backend CPU, oppure fallback documentato
-a Ollama/llama.cpp con gli stessi pesi (vedi `scripts/oracle-setup.sh`).
+**Runtime hub: Ollama con GGUF.** vLLM su ARM64 è accantonato: immagine
+ufficiale x86-only, e i pesi bf16 occuperebbero il doppio dei GGUF Q4
+girando più lenti su CPU ARM (vedi decisione 10 in hub-edge-topology.md).
 
 ### Edge (PC)
 
@@ -111,7 +117,7 @@ applicativa (difesa in profondità).
 **Opzione pubblica (alternativa)**: Caddy come reverse proxy TLS con dominio
 proprio (`https://tramamind-hub.tuodominio.it`) + token obbligatorio su ogni
 endpoint. Da scegliere solo se serve accesso da dispositivi senza Tailscale.
-In quel caso aprire solo 80/443 nella Security List OCI — mai 20128/8000/11434.
+In quel caso aprire solo 80/443 nella Security List OCI — mai 20128/11434/18789.
 
 Token e segreti condivisi: `~/.config/tramamind/auth.yaml` cifrato con **age**.
 
@@ -164,6 +170,9 @@ node:
 
 models:
   local:
+    - name: qwen3.5-9b-claude-opus-distill-v2   # primario (solo su hub da 24 GB)
+      max_context: 8192
+      quantization: Q4_K_M
     - name: gpt-5-distill-qwen3-4b
       max_context: 8192
       quantization: Q4_K_M
@@ -205,7 +214,7 @@ ollama:
 | Requisito | Hub (Oracle) | Edge (PC) |
 |-----------|-------------|-----------|
 | OS | Ubuntu 24.04 ARM64 | Linux/macOS/Windows |
-| RAM | 12 GB | 16+ GB |
+| RAM | 24 GB (12 su free-only) | 16+ GB |
 | Docker | 24+ | 24+ |
 | Python | 3.10+ | 3.10+ |
 | Rete | Tailscale | Tailscale |
@@ -241,5 +250,5 @@ Ogni fase entra nel repo solo quando installabile e testata (regola 5).
 ## Riferimenti
 
 - [Oracle Always Free](https://docs.oracle.com/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
-- [vLLM](https://docs.vllm.ai/) · [Ollama API](https://github.com/ollama/ollama/blob/main/docs/api.md)
+- [Ollama API](https://github.com/ollama/ollama/blob/main/docs/api.md) · [llama.cpp](https://github.com/ggml-org/llama.cpp)
 - [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) · [keyring](https://pypi.org/project/keyring/) · [age](https://age-encryption.org/)
