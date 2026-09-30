@@ -32,3 +32,13 @@
 9. **Implementazione per fasi** — regola 5: entra nel repo solo ciò che è
    installabile e testato. Design e config dichiarativi (providers.yaml)
    fanno eccezione perché sono la documentazione dell'implementazione.
+10. **Budget hub 4 OCPU / 24 GB + runtime Ollama/GGUF** (2026-09-30) —
+   la tenancy è PAYG e mantiene i limiti pre-giugno-2026 (3.000 OCPU-ore +
+   18.000 GB-ore/mese = 4 OCPU/24 GB sempre accesi, gratis): il banner in
+   console lo conferma. Conseguenze: la decisione 3 è superata nella parte
+   "9B escluso" — il **Qwen3.5-9B-Claude-Opus-Distill-v2 torna sull'hub come
+   primario**; il runtime hub è **Ollama con GGUF** (il 9B/4B in bf16 su
+   vLLM-CPU non avrebbe senso: pesi doppi e più lenti su ARM), quindi la
+   porta 8000/vLLM della decisione 2 non è più usata sull'hub. Account
+   free-only a 2 OCPU/12 GB: vale il vecchio budget (4B+2B, niente 9B),
+   documentato in oracle-free-tier.md.

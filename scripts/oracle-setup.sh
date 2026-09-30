@@ -2,14 +2,16 @@
 # TramaMind — provisioning VM Oracle Cloud Always Free (Ubuntu 24.04 ARM64)
 # Uso: curl -fsSL https://raw.githubusercontent.com/bitfarmy/tramamind/main/scripts/oracle-setup.sh | bash
 #
-# Allocazione RAM target (12 GB):
-#   sistema+Docker ~2GB · modello primario ~4GB · OmniRoute(L2 incluso) ~1.5GB · buffer ~4.5GB
+# Allocazione RAM target (24 GB, account PAYG):
+#   sistema+Docker ~2GB · Ollama 9B ~7GB · 4B+2B ~5GB · OmniRoute(L2 incluso) ~1.5GB · buffer ~9GB
+# Su account free-only (12 GB): lo script scarica comunque tutto; importa in
+# Ollama solo 4B+2B (il 9B non ci sta insieme al resto).
 #
 # I distillati sono modelli PUBBLICI su HuggingFace (autori: Jackrong, 11-47):
 # niente da caricare, la VM li scarica direttamente.
 set -euo pipefail
 
-echo "[tramamind] provisioning nodo always-on (Oracle A1.Flex, 2 OCPU / 12 GB)"
+echo "[tramamind] provisioning nodo always-on (Oracle A1.Flex, fino a 4 OCPU / 24 GB)"
 
 # ── Pacchetti base ────────────────────────────────────────────
 sudo apt-get update -y
@@ -24,16 +26,22 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 # ── Download modelli (repo HF pubblici, verificati 2026-09-29) ─
-# Primario: GPT-5-Distill-Qwen3-4B (Jackrong) — Qwen3-4B distillato su GPT-5
+# Primario: Qwen3.5-9B-Claude-Opus-Distill-v2 (Jackrong) — solo su hub da 24 GB
+# Bilanciato: GPT-5-Distill-Qwen3-4B (Jackrong)
 # Fast:     Gemini3.5-Code-Reasoner-2B (11-47) — task veloci e heartbeat
 #
-# NOTA RUNTIME: su 2 OCPU ARM la via realistica e' GGUF via llama.cpp/Ollama
-# (Q4_K_M ~2.5 GB per il 4B). vLLM CPU con safetensors bf16 (~8 GB per il 4B)
-# sfora il budget di 12 GB: tenerlo solo come esperimento.
+# NOTA RUNTIME: su ARM la via e' GGUF via Ollama/llama.cpp. vLLM-CPU con
+# safetensors bf16 occuperebbe il doppio della RAM girando piu' lento:
+# accantonato (decisione 10 in docs/hub-edge-topology.md).
 pip3 install --user -q "huggingface_hub[cli]"
 HF_BIN="$HOME/.local/bin/huggingface-cli"; [[ -x "$HF_BIN" ]] || HF_BIN="huggingface-cli"
 
-echo "[tramamind] download GGUF del primario (Q4_K_M)..."
+echo "[tramamind] download GGUF del primario 9B (Q4_K_M)..."
+"$HF_BIN" download Jackrong/Qwen3.5-9B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF \
+  --include "*Q4_K_M*" || \
+  echo "[tramamind] ATTENZIONE: repo 9B non trovato, verifica il nome su huggingface.co/Jackrong"
+
+echo "[tramamind] download GGUF del 4B bilanciato (Q4_K_M)..."
 "$HF_BIN" download Jackrong/GPT-5-Distill-Qwen3-4B-Instruct-GGUF \
   --include "*Q4_K_M*"
 
@@ -48,8 +56,8 @@ if ! command -v ollama >/dev/null 2>&1; then
   curl -fsSL https://ollama.com/install.sh | sh
 fi
 # I GGUF scaricati si importano con:
-#   ollama create gpt-5-distill-qwen3-4b -f <Modelfile che punta al .gguf>
-# vedi docs/oracle-free-tier.md per il Modelfile di esempio.
+#   ollama create <nome> -f <Modelfile che punta al .gguf>
+# vedi docs/oracle-free-tier.md per i Modelfile di esempio.
 
 # ── Firewall: solo SSH in ingresso ────────────────────────────
 # OmniRoute (20128), Ollama (11434) e OpenClaw (18789) NON vanno esposti:
@@ -64,7 +72,7 @@ else
   git -C "$HOME/tramamind" pull --ff-only
 fi
 
-# ── Swap di sicurezza (12 GB RAM: margine per i picchi) ───────
+# ── Swap di sicurezza (margine per i picchi) ────────────────
 if [[ ! -f /swapfile ]]; then
   sudo fallocate -l 4G /swapfile
   sudo chmod 600 /swapfile

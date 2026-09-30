@@ -20,15 +20,20 @@ providers:
     priority: 1
 
   # ── Hub Oracle (nodo always-on, raggiunto via Tailscale) ──
-  hub_vllm:
+  hub_ollama:
     env_key: TRAMAMIND_HUB_TOKEN   # auth applicativa tra nodi
-    base_url: http://localhost:8000/v1   # vLLM sull'hub (locale al router)
+    base_url: http://localhost:11434/v1   # Ollama sull'hub (locale al router)
     role: [hub]
-    models: [gpt-5-distill-qwen3-4b, gemini3.5-code-reasoner-2b]
+    models:
+      - qwen3.5-9b-claude-opus-distill-v2   # primario hub (Jackrong, GGUF Q4_K_M)
+      - gpt-5-distill-qwen3-4b              # bilanciato
+      - gemini3.5-code-reasoner-2b          # fast lane / heartbeat
     priority: 5   # dopo locale, prima del cloud
     notes: >
-      Su Oracle A1.Flex 12 GB: 4B primario + 2B fast lane.
-      Il 9B è escluso (budget RAM). Context max 8k (KV cache contenuta).
+      Account PAYG con limiti pre-giugno-2026: A1.Flex 4 OCPU / 24 GB,
+      tutti e tre i modelli coesistono (Ollama keep-alive). Su account
+      free-only (2 OCPU / 12 GB): escludere il 9B, tenere 4B + 2B.
+      Runtime GGUF via Ollama (vLLM bf16 non sensato su CPU ARM).
 
   # ── L3B · API gratuite ──
   google:
