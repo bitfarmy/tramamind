@@ -55,9 +55,10 @@ I modelli in [local-models.md](local-models.md) hanno licenze proprie:
 
 ## Dati e privacy
 
-- I modelli locali (L3C) non inviano nulla all'esterno: **privacy totale**.
-- Tutto ciò che passa per L3B esce dalla tua macchina: non inviare dati
-  sensibili al cloud.
+- La chat locale non invia nulla all'esterno.
+- Se la risposta locale è vuota, è una scusa, o chiedi di rifarla, parte
+  **una** chiamata cloud (Groq diretto o OmniRoute). Quel testo esce dalla
+  macchina: non metterci dati che non manderesti a quel provider.
 - OmniRoute gira al 100% in locale, zero telemetria; la sua cache resta
   sul tuo disco — svuotala se contiene dati sensibili.
 

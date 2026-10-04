@@ -1,4 +1,6 @@
-# TramaMind × OpenClaw — Gateway omnicanale (L5b)
+# TramaMind × OpenClaw — extra, non parte da solo
+
+> `tramamind up` non avvia OpenClaw. La chat utile è `tramamind chat`.
 
 OpenClaw espone TramaMind su Telegram (e opzionalmente WhatsApp/Discord) senza toccare lo stack esistente: punta a **OmniRoute** come provider OpenAI-compatible, quindi routing, failover, compressione e cache semantica (L2, integrati in OmniRoute) restano tutti attivi.
 

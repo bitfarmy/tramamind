@@ -4,14 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tramamind"
-version = "0.2.0"
-description = "IA personale multi-modello: router, distillati locali, API gratuite"
+version = "0.5.0"
+description = "Local proxy that caps chat context, keeps recent turns and code verbatim, and prints the tokens it did not send."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
+authors = [{ name = "bitfarmy" }]
+keywords = ["ollama", "llm", "context", "tokens", "proxy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "pydantic>=2.5",
-    "pydantic-settings>=2.2",
     "keyring>=24.3",
     "PyYAML>=6.0",
 ]
@@ -19,8 +31,19 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
+[project.urls]
+Homepage = "https://github.com/bitfarmy/tramamind"
+Repository = "https://github.com/bitfarmy/tramamind"
+Issues = "https://github.com/bitfarmy/tramamind/issues"
+
 [project.scripts]
 tramamind = "cli.main:main"
 
 [tool.setuptools]
 packages = ["router", "cli"]
+
+[tool.setuptools.package-data]
+cli = ["assets/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

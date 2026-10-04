@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# TramaMind — avvio gateway OpenClaw (L5b)
-# Da includere in scripts/start-all.sh DOPO OmniRoute.
+# Extra. `tramamind up` non lo chiama.
+# TramaMind — avvio gateway OpenClaw, dopo che OmniRoute risponde.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,17 +1,9 @@
-# TramaMind — stack containerizzato (alternativa agli script nativi)
+# Percorso opzionale per avere Ollama e OmniRoute in Docker.
+# La chat con il tetto è `tramamind chat`, che parla con Ollama su :11434.
+# OpenHands non parte con `docker compose up`: è nel profilo "agent".
 #
-# Servizi: Ollama (L1), OmniRoute (L4), OpenHands (L-APP).
-#
-# NOTA L2: la compressione NON e' un servizio separato — e' integrata in
-# OmniRoute (pipeline RTK/Caveman + cache semantica, si attiva da
-# Dashboard → Compression). Vedi docs/compression.md.
-#
-# Uso:
-#   cp .env.example .env   # compila le chiavi
 #   docker compose up -d
-#
-# Dashboard OmniRoute: http://localhost:20128
-# OpenHands UI:        http://localhost:3000
+#   tramamind chat
 
 name: tramamind
 
@@ -49,17 +41,18 @@ services:
     ports:
       - "127.0.0.1:20128:20128"
     environment:
-      # Heap V8 maggiorato per workload agentici (default immagine: 1024)
-      OMNIROUTE_MEMORY_MB: ${OMNIROUTE_MEMORY_MB:-8192}
-    mem_limit: ${OMNIROUTE_CONTAINER_MEM:-10g}
+      # 1024 MB bastano per la chat. Alza il valore solo se ci fai girare agenti.
+      OMNIROUTE_MEMORY_MB: ${OMNIROUTE_MEMORY_MB:-1024}
+    mem_limit: ${OMNIROUTE_CONTAINER_MEM:-2g}
     volumes:
       - omniroute-data:/app/data
     depends_on:
       ollama:
         condition: service_healthy
 
-  # ---------- L-APP: agente di coding autonomo ----------
+  # Extra. docker compose --profile agent up
   openhands:
+    profiles: ["agent"]
     image: docker.openhands.dev/openhands/openhands:1.8
     container_name: tramamind-openhands
     restart: unless-stopped

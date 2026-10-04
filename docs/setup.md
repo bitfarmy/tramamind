@@ -1,107 +1,50 @@
 # Setup
 
-## Requisiti
-
-| Requisito | Minimo | Verifica |
-|---|---|---|
-| Node.js | 20+ | `node --version` |
-| Python | 3.10+ | `python3 --version` |
-| Ollama | latest | `ollama --version` |
-| RAM | 16 GB | `free -h` |
-| SSD | 50 GB liberi | `df -h` |
-| jq | qualsiasi | richiesto da `benchmarks/benchmark.sh` |
-
-## Installazione
+Serve Python 3.10+ e Ollama. OmniRoute è opzionale.
 
 ```bash
-git clone https://github.com/bitfarmy/tramamind.git
-cd tramamind
 ./scripts/install.sh
+.venv/bin/tramamind setup
+.venv/bin/tramamind pull
+.venv/bin/tramamind doctor
+.venv/bin/tramamind chat
 ```
 
-`install.sh`:
-
-1. Verifica le dipendenze (incluso OmniRoute: se manca, propone
-   `npm install -g omniroute`).
-2. Crea `.env` da `.env.example` (se assente).
-3. Crea `data/` (log, PID, risultati benchmark).
-4. Con `--pull-models` scarica una selezione di modelli locali su Ollama.
-
-## Configurazione
-
-Modifica `.env` nella radice:
+`setup` senza opzioni, da terminale, chiede il preset e le chiavi. Senza terminale interattivo:
 
 ```bash
-# Provider a pagamento/basso costo
-KIMI_API_KEY=sk-...
-
-# Provider gratuiti (lascia vuoti quelli che non usi)
-GOOGLE_API_KEY=AIza...
-GROQ_API_KEY=gsk_...
-NVIDIA_API_KEY=nvapi-...
-CEREBRAS_API_KEY=csk-...
-OPENROUTER_API_KEY=sk-or-...
-
-# Override opzionali per chat.sh
-#TRAMAMIND_ENDPOINT=http://localhost:20128/v1/chat/completions
-#TRAMAMIND_MODEL=auto
-#TRAMAMIND_TIMEOUT=120
+tramamind setup --preset cpu16 --non-interactive
 ```
 
-> 🔐 `.env` è nel `.gitignore`. Non committarlo mai.
+`--pull` nello stesso comando scarica i modelli. `--force` riscrive i tag se il profilo c'è già.
 
-Le chiavi vanno inserite **anche nella dashboard di OmniRoute**
-(`http://localhost:20128` → Providers), che è il punto dove il router le usa
-davvero. Il `.env` serve agli script TramaMind e come promemoria sicuro.
+La pagina di configurazione è `tramamind ui`: preset, chiavi mascherate, scheda, chat. Ascolta solo `127.0.0.1:8787`. Dalla stessa pagina si impostano tetto e turni interi, si sceglie Ollama o OmniRoute, e si avvia il proxy. L'indirizzo da incollare nel client è `http://127.0.0.1:8788/v1`. Sotto compare l'ultima riga dei token.
 
-## OmniRoute: configurazione consigliata
-
-Dalla dashboard:
-
-1. **Providers** → connetti Ollama (locale) e i provider cloud con le tue chiavi.
-2. **Fallback Chains** → catena consigliata:
-   `Ollama → Google → Groq → NVIDIA → Cerebras → OpenRouter → Kimi`
-3. **Compression** → attiva la pipeline (RTK + Caveman per iniziare).
-4. **Semantic Cache** → attiva.
-5. **Endpoints** → copia la API key da usare nei client.
-
-## Avvio
+Per un client OpenAI-compatible (Cursor, Continue) il proxy è un altro comando, sulla porta `8788`:
 
 ```bash
-./scripts/start-all.sh   # Ollama + OmniRoute (PID in data/)
-./scripts/doctor.sh      # verifica lo stato di tutto lo stack
-./scripts/chat.sh        # prima chat
+tramamind proxy
+# base URL: http://127.0.0.1:8788/v1
+# a monte, di default: http://127.0.0.1:11434/v1
 ```
 
-## Verifica rapida
+`tramamind demo` stampa il conto dei token su una chat di esempio e non ha bisogno di Ollama. `tramamind pack sessione.json` fa il conto su un file di messaggi. Da un altro ambiente Python:
 
 ```bash
-./scripts/chat.sh "Scrivi un haiku sulla privacy"
-# → risposta + riga di provenienza:
-#   ⚡ provider=ollama/qwen3:8b · 842ms · 312 token (in 45 / out 267)
+pipx install "git+https://github.com/bitfarmy/tramamind"
 ```
 
-## Alias per task
+Oppure, da questo repository, `pipx install .`.
 
-Scorciatoie per scegliere il modello in base al task:
+Per Groq: https://console.groq.com/keys e poi `tramamind keys add groq`. L'escalation usa l'API OpenAI-compatible di Groq, senza passare da OmniRoute.
 
-```bash
-./scripts/chat.sh --code "refactora questa funzione"   # qwen2.5-coder:7b
-./scripts/chat.sh --think "risolvi questo problema"   # deepseek-r1:8b
-./scripts/chat.sh --fast "traduci questo"             # gemma3:4b
-./scripts/chat.sh --write "scrivi un post"            # qwen3:8b
-```
+Per più provider insieme: `npm install -g omniroute`, `tramamind keys add …`, `tramamind sync`, `tramamind up`. Il profilo tiene `escalation.transport: auto`, quindi se OmniRoute risponde si usa quello, altrimenti Groq.
 
-Senza alias il modello è `auto`: decide il router. Nel REPL: `/alias`
-mostra la mappa con il modello attivo, `/use NOME` cambia alias al volo.
-I modelli associati si personalizzano in `.env` (`ALIAS_CODE=`, …).
+File:
 
-## Problemi comuni
-
-| Sintomo | Causa probabile | Soluzione |
-|---|---|---|
-| `connection refused :11434` | Ollama non avviato | `ollama serve` o `./scripts/start-all.sh` |
-| `connection refused :20128` | OmniRoute non avviato | `omniroute` o `./scripts/start-all.sh` |
-| `401 Unauthorized` | API key client errata | Dashboard → Endpoints → copia la chiave |
-| Failover continui | Provider in rate limit | Normale: il router scala la catena |
-| OOM sui modelli locali | VRAM/RAM insufficiente | Modello più piccolo: [local-models.md](local-models.md) |
+| Percorso | Cosa c'è |
+|---|---|
+| `~/.config/tramamind/profile.yaml` | preset, tetto, modello cloud |
+| `~/.config/tramamind/card.md` | fatti stabili |
+| keyring / `secrets.age` / `.env` | chiavi, mai nel git |
+| `~/.local/share/tramamind/sessions` | chat |

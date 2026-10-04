@@ -1,32 +1,15 @@
-"""
-`tramamind keys` — gestione interattiva delle API key.
-
-I provider vengono letti da router/providers.yaml (campo env_key):
-niente elenchi hardcoded, il catalogo e' unico e versionato.
-"""
+"""`tramamind keys` — le chiavi stanno nel keyring, in age o in .env locale."""
 from __future__ import annotations
 
 import getpass
-from pathlib import Path
 
 from router import keystore
+from router.providers import resolve_provider
 
 
 def _load_providers() -> list[str]:
-    """Provider con env_key dal catalogo versionato."""
-    catalog = Path(__file__).resolve().parent.parent / "router" / "providers.yaml"
-    try:
-        import yaml
-        data = yaml.safe_load(catalog.read_text())
-        names = [
-            name for name, cfg in data.get("providers", {}).items()
-            if cfg.get("env_key") and str(cfg["env_key"]).endswith("_API_KEY")
-        ]
-        if names:
-            return names
-    except Exception:
-        pass
-    return ["google", "groq", "nvidia", "cerebras", "openrouter", "kimi"]
+    from router.providers import provider_ids
+    return provider_ids()
 
 
 def _pick_backend(cli_choice: str | None) -> str:
@@ -73,8 +56,11 @@ def cmd_add(provider: str | None, backend: str | None) -> int:
         except (ValueError, IndexError):
             print("Scelta non valida.")
             return 1
-    if provider not in providers:
-        print(f"nota: '{provider}' non e' nel catalogo providers.yaml - procedo comunque")
+    known = resolve_provider(provider)
+    if known is None and provider not in providers:
+        print(f"nota: '{provider}' non è nel catalogo — procedo comunque")
+    elif known is not None:
+        provider = known.id
 
     key = _ask_key(provider)
     if not key:
@@ -101,7 +87,7 @@ def cmd_setup(backend: str | None) -> int:
     for p, k in collected.items():
         keystore.store_key(p, k, chosen)
     print(f"\nOK: {len(collected)} chiavi salvate ({chosen})")
-    print("Nota: le stesse chiavi vanno inserite in OmniRoute -> Dashboard -> Providers")
+    print("Per spingerle in OmniRoute, se lo usi: `tramamind sync`")
     return 0
 
 

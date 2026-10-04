@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TramaMind</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    background: #161410; color: #f4efe6;
+    font: 16px/1.45 ui-sans-serif, system-ui, sans-serif;
+  }
+  header, main { max-width: 980px; margin: 0 auto; padding: 1.2rem 1.2rem 0; }
+  h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 .2rem; }
+  p.lead { margin: 0; color: #b7ab9a; }
+  .grid { display: grid; grid-template-columns: 280px 1fr; gap: 1.2rem; padding: 1.2rem; max-width: 980px; margin: 0 auto; }
+  .grid > div { min-width: 0; }
+  section { border-top: 1px solid #3a342c; padding-top: .8rem; }
+  h2 { font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: #b7ab9a; margin: 0 0 .6rem; }
+  button, select, textarea, input {
+    font: inherit; color: inherit; background: #221e19; border: 1px solid #4a4338; border-radius: 6px;
+  }
+  button { padding: .35rem .7rem; cursor: pointer; }
+  button.primary { background: #e6a15c; color: #1b140c; border-color: #e6a15c; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .presets { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .check { display: flex; gap: .4rem; margin: .2rem 0; }
+  .ok { color: #b7d3a8; } .warn { color: #e6c15c; } .fail { color: #e58b7a; }
+  #log { min-height: 240px; white-space: pre-wrap; }
+  .bubble { margin: 0 0 .9rem; }
+  .who { color: #b7ab9a; font-size: .85rem; }
+  .stats { color: #8d8274; font-size: .85rem; margin-top: .25rem; }
+  form.chat { display: flex; gap: .5rem; margin-top: .6rem; }
+  form.chat textarea { flex: 1; min-height: 3.2rem; padding: .5rem; resize: vertical; }
+  label { display: block; margin: .45rem 0 .2rem; color: #b7ab9a; font-size: .85rem; }
+  input[type="password"], input[type="number"], select, textarea.card { width: 100%; max-width: 100%; min-width: 0; padding: .4rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .6rem; }
+  section.proxy { max-width: 28rem; }
+  textarea.card { min-height: 7rem; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>TramaMind</h1>
+  <p class="lead">Modello sul tuo PC. Il cloud parte solo se la risposta locale non basta.</p>
+</header>
+<main class="grid">
+  <div>
+    <section class="proxy">
+      <h2>Proxy</h2>
+      <label for="budget">Tetto</label>
+      <input id="budget" type="number" min="1" step="1" inputmode="numeric">
+      <label for="verbatim">Turni interi</label>
+      <input id="verbatim" type="number" min="1" step="1" inputmode="numeric">
+      <label for="upstream">Upstream</label>
+      <select id="upstream"></select>
+      <p class="stats" id="upstream-url"></p>
+      <p class="stats" id="proxy-url"></p>
+      <p class="stats" id="proxy-line">nessuna richiesta</p>
+      <p class="stats">Ferma e riavvia per applicare tetto e upstream.</p>
+      <div class="row">
+        <button id="save-proxy" type="button">Salva</button>
+        <button id="toggle-proxy" class="primary" type="button">Avvia</button>
+      </div>
+      <div id="proxy-note" class="stats"></div>
+    </section>
+    <section>
+      <h2>Macchina</h2>
+      <div id="checks"></div>
+    </section>
+    <section>
+      <h2>Preset</h2>
+      <div class="presets" id="presets"></div>
+    </section>
+    <section>
+      <h2>Chiave cloud</h2>
+      <label for="provider">Provider</label>
+      <select id="provider"></select>
+      <label for="secret">Chiave, resta su questo PC</label>
+      <input id="secret" type="password" autocomplete="off">
+      <button id="save-key" style="margin-top:.5rem">Salva</button>
+      <div id="key-note" class="stats"></div>
+    </section>
+    <section>
+      <h2>Scheda</h2>
+      <textarea id="card" class="card"></textarea>
+      <button id="save-card" style="margin-top:.5rem">Aggiorna scheda</button>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>Chat</h2>
+      <label for="session">Sessione</label>
+      <select id="session"></select>
+      <div id="log"></div>
+      <form class="chat" id="chat">
+        <textarea id="message" placeholder="Scrivi. La storia lunga viene riassunta, non rispedita."></textarea>
+        <button class="primary" type="submit" id="send">Invia</button>
+      </form>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, body) {
+  const opts = body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {};
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function render(status) {
+  $("checks").innerHTML = status.checks.map(c =>
+    `<div class="check ${c.level}"><span>${c.level === "ok" ? "✓" : c.level === "warn" ? "!" : "✗"}</span><span><b>${c.name}</b> ${c.detail}</span></div>`
+  ).join("");
+  $("presets").innerHTML = Object.entries(status.presets).map(([id, label]) =>
+    `<button data-preset="${id}" ${status.profile && status.profile.preset === id ? "class=primary" : ""}>${id}<br><span class="stats">${label}</span></button>`
+  ).join("");
+  $("presets").querySelectorAll("button").forEach(btn => btn.onclick = async () => {
+    await api("/api/profile", {preset: btn.dataset.preset});
+    await refresh();
+  });
+  const current = $("provider").value;
+  $("provider").innerHTML = status.keys.filter(k => k.id !== "omniroute").map(k =>
+    `<option value="${k.id}">${k.label}${k.present ? " · presente" : ""}</option>`
+  ).join("");
+  if (current) $("provider").value = current;
+  if (document.activeElement !== $("card")) $("card").value = status.card || "";
+  const sid = $("session").value;
+  $("session").innerHTML = `<option value="">continua l'ultima</option>` + status.sessions.map(s =>
+    `<option value="${s.id}">${s.title}</option>`
+  ).join("");
+  if (sid) $("session").value = sid;
+  const proxy = status.proxy;
+  if (document.activeElement !== $("budget")) $("budget").value = proxy.budget_tokens;
+  if (document.activeElement !== $("verbatim")) $("verbatim").value = proxy.verbatim_turns;
+  const signature = proxy.upstreams.map(item => item.id + item.url).join("|");
+  if ($("upstream").dataset.sig !== signature) {
+    const chosen = $("upstream").value || proxy.upstream;
+    $("upstream").innerHTML = proxy.upstreams.map(item =>
+      `<option value="${item.id}" data-url="${item.url}">${item.label}</option>`
+    ).join("");
+    $("upstream").dataset.sig = signature;
+    $("upstream").value = chosen;
+  }
+  if (document.activeElement !== $("upstream")) $("upstream").value = proxy.upstream;
+  const selected = $("upstream").selectedOptions[0];
+  $("upstream-url").textContent = selected ? selected.dataset.url : "";
+  $("proxy-url").textContent = proxy.url;
+  $("proxy-line").textContent = proxy.last_line || "nessuna richiesta";
+  $("toggle-proxy").textContent = proxy.running ? "Ferma" : "Avvia";
+  $("toggle-proxy").dataset.running = proxy.running ? "1" : "0";
+}
+
+async function refresh() { render(await api("/api/status")); }
+
+$("save-key").onclick = async () => {
+  $("key-note").textContent = "";
+  try {
+    const out = await api("/api/keys", {provider: $("provider").value, key: $("secret").value});
+    $("secret").value = "";
+    $("key-note").textContent = "salvata in " + out.backend;
+    await refresh();
+  } catch (err) { $("key-note").textContent = err.message; }
+};
+
+$("save-card").onclick = async () => {
+  await api("/api/card", {text: $("card").value});
+  $("key-note").textContent = "";
+};
+
+function proxyBody() {
+  return {
+    budget: Number($("budget").value),
+    verbatim: Number($("verbatim").value),
+    upstream: $("upstream").value,
+  };
+}
+
+$("save-proxy").onclick = async () => {
+  $("proxy-note").textContent = "";
+  try {
+    await api("/api/proxy", Object.assign({action: "save"}, proxyBody()));
+    $("proxy-note").textContent = "salvato nel profilo";
+    await refresh();
+  } catch (err) { $("proxy-note").textContent = err.message; }
+};
+
+$("upstream").onchange = () => {
+  const selected = $("upstream").selectedOptions[0];
+  $("upstream-url").textContent = selected ? selected.dataset.url : "";
+};
+
+$("toggle-proxy").onclick = async () => {
+  $("proxy-note").textContent = "";
+  const action = $("toggle-proxy").dataset.running === "1" ? "stop" : "start";
+  $("toggle-proxy").disabled = true;
+  try {
+    await api("/api/proxy", Object.assign({action}, proxyBody()));
+    await refresh();
+  } catch (err) {
+    $("proxy-note").textContent = err.message;
+  } finally { $("toggle-proxy").disabled = false; }
+};
+
+$("chat").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const message = $("message").value.trim();
+  if (!message) return;
+  $("send").disabled = true;
+  const log = $("log");
+  log.insertAdjacentHTML("beforeend", `<div class="bubble"><div class="who">tu</div>${escapeHtml(message)}</div>`);
+  $("message").value = "";
+  try {
+    const body = {message};
+    if ($("session").value) body.session = $("session").value;
+    const out = await api("/api/chat", body);
+    let html = "";
+    if (out.local_text) html += `<div class="stats">${escapeHtml(out.local_text)}</div>`;
+    html += `<div class="bubble"><div class="who">tramamind</div>${escapeHtml(out.text)}<div class="stats">${escapeHtml(out.stats)}</div></div>`;
+    log.insertAdjacentHTML("beforeend", html);
+    $("session").value = out.session;
+    await refresh();
+    $("session").value = out.session;
+  } catch (err) {
+    log.insertAdjacentHTML("beforeend", `<div class="fail">${escapeHtml(err.message)}</div>`);
+  } finally { $("send").disabled = false; }
+};
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+}
+
+refresh().catch(err => { $("checks").textContent = err.message; });
+setInterval(() => { refresh().catch(() => {}); }, 3000);
+</script>
+</body>
+</html>

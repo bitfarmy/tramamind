@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
+# NON è il percorso supportato.
+# Il prodotto è `tramamind setup` + `tramamind chat` sul PC.
+# Questo script resta solo come appunto per una VM Oracle, non testato dal flusso principale.
 # TramaMind — provisioning VM Oracle Cloud Always Free (Ubuntu 24.04 ARM64)
-# Uso: curl -fsSL https://raw.githubusercontent.com/bitfarmy/tramamind/main/scripts/oracle-setup.sh | bash
+# Non lanciarlo. Il percorso supportato è `tramamind setup` sul PC.
 #
 # Allocazione RAM target (24 GB, account PAYG):
 #   sistema+Docker ~2GB · Ollama 9B ~7GB · 4B+2B ~5GB · OmniRoute(L2 incluso) ~1.5GB · buffer ~9GB
@@ -46,9 +49,10 @@ echo "[tramamind] download GGUF del 4B bilanciato (Q4_K_M)..."
   --include "*Q4_K_M*"
 
 echo "[tramamind] download fast lane 2B..."
-"$HF_BIN" download 11-47/Gemini3.5-Code.Reasoner-2b || \
-  echo "[tramamind] ATTENZIONE: repo 11-47/Gemini3.5-Code.Reasoner-2b non raggiungibile;"
-  echo "[tramamind] alternative: Jackrong/Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-GGUF"
+"$HF_BIN" download 11-47/Gemini3.5-Code.Reasoner-2b || {
+  echo "[tramamind] ATTENZIONE: repo 11-47/Gemini3.5-Code.Reasoner-2b non raggiungibile"
+  echo "[tramamind] alternativa: Jackrong/Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-GGUF"
+}
 
 # ── Runtime: Ollama (default su ARM) ──────────────────────────
 if ! command -v ollama >/dev/null 2>&1; then

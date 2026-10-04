@@ -1,118 +1,15 @@
-# Architettura
+# Come è fatto
 
-TramaMind è organizzato in **5 livelli logici**, dalla presentazione al runtime.
-Due componenti fanno il grosso del lavoro: **OmniRoute** (router/gateway) e
-**Ollama** (runtime locale). Tutto il resto è configurazione e script.
+Tre pezzi.
 
-> ⚠️ Questo documento descrive lo stack **reale**. Niente componenti
-> aspirazionali: se qualcosa non esiste come pacchetto installabile, qui non
-> c'è.
+1. **Il pacchetto.** `router/packet.py` tiene gli ultimi turni interi e mette il resto in un riassunto. Il tetto di default è 2500 token stimati (circa 3,5 caratteri per token, la stessa stima per il pacchetto e per la storia intera). Se la stima della storia sta nel tetto, non si riassume niente. Il riassunto lo scrive il modello solo quando è lo stesso tag della risposta, così Ollama non scarica un secondo modello a ogni turno. Negli altri preset il riassunto è estrattivo. Dai turni vecchi restano, se ci stanno, fino a quattro estratti parola per parola: codice, diff, traceback, risultato di un tool.
+2. **Il modello locale.** Ollama, tag scelti dal preset. Codice, ragionamento e chat generale sono tre tag diversi. La scelta è una regola sul testo (`refactor`, un blocco di codice, "passo passo"), non un classificatore.
+3. **Una escalation.** Groq diretto se c'è la chiave, altrimenti OmniRoute se è acceso. Parte se Ollama non risponde, se la risposta è vuota o è una scusa breve, o se scrivi "rifallo meglio". Una volta per messaggio. Poi ci si ferma.
 
-## L5 — Interfaccia
+Lo stesso pacchetto è un proxy OpenAI-compatible: `tramamind proxy` ascolta su `127.0.0.1:8788` e inoltra a Ollama o all'upstream che indichi. Il riassunto del proxy è sempre estrattivo, così non carica un secondo modello. `tramamind demo` stampa il conto su una chat finta. `tramamind pack` lo stampa su una trascrizione JSON. Nessuno dei due comandi chiama un modello.
 
-**Oggi:** la CLI (`scripts/chat.sh`), un REPL da terminale che mostra
-provenienza, latenza e token per ogni risposta.
+Le sessioni stanno in `~/.local/share/tramamind/sessions`. La scheda stabile è `~/.config/tramamind/card.md`: le righe che iniziano con `#` non vengono inviate. Il log `requests.jsonl` registra modello, tempi e token, non il testo.
 
-**Domani (fase 3):** fork di Berd con:
+OmniRoute, quando c'è, riceve le chiavi da `tramamind sync` (`omniroute setup --add-provider`). L'heap di default è 1024 MB, abbastanza per la chat. Non si alza a 8 GB da solo.
 
-- pannello VRAM dei modelli locali caricati,
-- toggle compressione ON/OFF,
-- selettore modalità `Locale` / `Cloud` / `Auto`,
-- indicatore di provenienza per ogni risposta.
-
-Entrambe parlano con OmniRoute via API OpenAI-compatibile: nessuna logica
-di routing nell'interfaccia.
-
-## L4 — Router: OmniRoute (`:20128`)
-
-Installazione: `npm install -g omniroute`. Dashboard e API sullo stesso
-endpoint (`http://localhost:20128`, API sotto `/v1`).
-
-Cosa fa per noi (già incluso, **non reimplementare**):
-
-- **19 strategie di routing**: `priority`, `weighted`, `round-robin`,
-  `cost-optimized`, `context-optimized`, `cache-optimized`, `fusion`,
-  `pipeline`, `auto` (bandit adattivo), …
-- **Fallback a catena** con circuit breaker e cooldown esponenziale su
-  `429`/`5xx` (rispetta `Retry-After`).
-- **Quota tracking** per provider e chiave, con lock giornaliero a esaurimento.
-- **Cache semantica** a due livelli (signature + semantica).
-- **Compressione** (vedi L2).
-- **Dashboard**: latenze p50/p95/p99, stato provider, costi, log.
-
-La catena di failover si configura dalla dashboard (Fallback Chains). Quella
-consigliata per TramaMind:
-
-```
-Ollama (locale) → Google → Groq → NVIDIA → Cerebras → OpenRouter → Kimi
-```
-
-## L3 — Provider
-
-### L3A — Accesso diretto (mai proxyato)
-
-- **Claude Pro**: SOLO via Claude Code CLI o claude.ai. **MAI** attraverso
-  OmniRoute o qualsiasi proxy: viola i ToS e rischia il ban.
-- **Kimi**: via API ufficiale (`platform.moonshot.ai`), supportata da
-  OmniRoute come provider first-class.
-
-### L3B — API gratuite
-
-| Provider | Console | Note |
-|---|---|---|
-| Google AI Studio | aistudio.google.com | Tier gratuito generoso |
-| Groq | console.groq.com | Latenza bassissima |
-| NVIDIA NIM | build.nvidia.com | Buona varietà modelli |
-| Cerebras | cloud.cerebras.ai | Inferenza ultra-veloce |
-| OpenRouter | openrouter.ai | Aggregatore, modelli free |
-
-OmniRoute supporta 300+ provider e 90+ tier gratuiti: questi cinque sono la
-selezione di TramaMind, non il limite.
-
-### L3C — Modelli locali (priorità 1)
-
-Girano su Ollama (`localhost:11434/v1`) e OmniRoute li vede come provider
-locali. Privacy totale, zero costi, funzionano offline. Catalogo verificato
-in [local-models.md](local-models.md): Qwen2.5-Coder / Qwen3 (codice),
-Gemma 3 (generale), DeepSeek-R1 Distill (ragionamento).
-
-## L2 — Compressione (integrata in OmniRoute)
-
-**Non è un processo separato.** OmniRoute include una pipeline di
-compressione a 12 motori (Session-Dedup, RTK, Caveman, LLMLingua-2, …) che
-riduce i token idonei del **15–95%** a seconda del carico, più la cache
-semantica che azzera il costo delle richieste ripetute.
-
-Aspettative oneste: su traffico misto reale il risparmio tipico è **20–50%**;
-oltre l'85% solo con cache hit alti. Si misura con
-`benchmarks/benchmark.sh`, non si stima. Dettagli in
-[compression.md](compression.md).
-
-## L1 — Runtime
-
-| Runtime | Ruolo |
-|---|---|
-| **Ollama** | Primario — serve i modelli locali |
-| LM Studio | Alternativo / debug |
-| llama.cpp | Fallback minimale |
-| vLLM | Throughput elevato (multi-batch) |
-
-Tutti esposti a OmniRoute come provider locali.
-
-## Flusso di una richiesta
-
-```
-chat.sh ──► OmniRoute :20128 ──► (cache hit? → risposta immediata)
-                │
-                ▼
-        strategia di routing + compressione prompt
-                │
-                ▼
-        provider scelto (locale prima, poi cloud)
-                │  errore 429/5xx? → cooldown + prossimo della catena
-                ▼
-        risposta ──► chat.sh (testo + provenienza: provider, ms, token)
-```
-
-Ogni richiesta è loggata in `data/requests.jsonl` e aggregata da
-`scripts/stats.sh`.
+`tramamind up` avvia Ollama se è spento, e OmniRoute solo se c'è almeno una chiave cloud e il binario è installato. `tramamind down` ferma solo i processi che ha avviato lui.

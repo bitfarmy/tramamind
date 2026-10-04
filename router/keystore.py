@@ -1,33 +1,56 @@
 """
-TramaMind — storage chiavi a tre livelli.
+Storage chiavi a tre livelli.
 
-Cascata di risoluzione (vedi docs/cloud-implementation.md):
-  1. keyring di sistema   (solo dove esiste un backend: desktop)
-  2. file cifrato age     (~/.config/tramamind/secrets.age — consigliato su server)
-  3. .env plain           (~/.config/tramamind/.env — solo sviluppo)
-  4. variabili ambiente   (Docker, CI) — gestita dal chiamante
-
-Nessuna chiave passa mai per file versionati.
+Cascata: keyring di sistema, file cifrato age, .env con permessi 0600,
+variabile d'ambiente. Nessuna chiave finisce in un file versionato.
 """
 from __future__ import annotations
 
 import os
 import shutil
 import subprocess
-from pathlib import Path
+
+from router.paths import config_dir
+from router.providers import resolve_provider
 
 SERVICE_NAME = "tramamind"
-CONFIG_DIR = Path.home() / ".config" / "tramamind"
-PLAIN_ENV_FILE = CONFIG_DIR / ".env"
-AGE_SECRETS = CONFIG_DIR / "secrets.age"
-AGE_IDENTITY = CONFIG_DIR / "age-identity.txt"
+
+
+def plain_env_file():
+    return config_dir() / ".env"
+
+
+def age_secrets():
+    return config_dir() / "secrets.age"
+
+
+def age_identity():
+    return config_dir() / "age-identity.txt"
+
+
+def canonical(provider: str) -> str:
+    found = resolve_provider(provider)
+    return found.id if found else provider.strip().lower()
+
+
+def lookup_names(provider: str) -> list[str]:
+    found = resolve_provider(provider)
+    if found is None:
+        return [provider.strip().lower()]
+    names = [found.id, *found.aliases]
+    seen = []
+    for name in names:
+        if name not in seen:
+            seen.append(name)
+    return seen
 
 
 def env_var_name(provider: str) -> str:
-    return f"{provider.upper()}_API_KEY"
+    found = resolve_provider(provider)
+    if found is not None:
+        return found.env_key
+    return f"{canonical(provider).upper()}_API_KEY"
 
-
-# ── Backend: keyring ─────────────────────────────────────────
 
 def keyring_available() -> bool:
     """True solo se esiste un backend keyring reale (non su Linux headless)."""
@@ -60,34 +83,33 @@ def _keyring_delete(provider: str) -> None:
         pass
 
 
-# ── Backend: age ─────────────────────────────────────────────
-
 def age_available() -> bool:
     return shutil.which("age") is not None and shutil.which("age-keygen") is not None
 
 
 def _age_ensure_identity() -> str:
-    """Crea l'identità age se manca; ritorna il recipient pubblico."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if not AGE_IDENTITY.exists():
+    """Crea l'identità age se manca e ritorna il recipient pubblico."""
+    identity = age_identity()
+    config_dir().mkdir(parents=True, exist_ok=True)
+    if not identity.exists():
         out = subprocess.run(
-            ["age-keygen", "-o", str(AGE_IDENTITY)],
+            ["age-keygen", "-o", str(identity)],
             check=True, capture_output=True, text=True,
         )
-        AGE_IDENTITY.chmod(0o600)
-        recipient = out.stderr.strip().splitlines()[-1].split()[-1]
-        return recipient
-    for line in AGE_IDENTITY.read_text().splitlines():
+        identity.chmod(0o600)
+        return out.stderr.strip().splitlines()[-1].split()[-1]
+    for line in identity.read_text(encoding="utf-8").splitlines():
         if line.startswith("# public key:"):
             return line.split(":")[-1].strip()
-    raise RuntimeError(f"recipient non trovato in {AGE_IDENTITY}")
+    raise RuntimeError(f"recipient non trovato in {identity}")
 
 
 def _age_read_all() -> dict[str, str]:
-    if not AGE_SECRETS.exists():
+    secrets = age_secrets()
+    if not secrets.exists():
         return {}
     out = subprocess.run(
-        ["age", "-d", "-i", str(AGE_IDENTITY), str(AGE_SECRETS)],
+        ["age", "-d", "-i", str(age_identity()), str(secrets)],
         check=True, capture_output=True, text=True,
     )
     return _parse_dotenv(out.stdout)
@@ -95,82 +117,80 @@ def _age_read_all() -> dict[str, str]:
 
 def _age_write_all(entries: dict[str, str]) -> None:
     recipient = _age_ensure_identity()
-    body = "\n".join(f"{k}={v}" for k, v in sorted(entries.items())) + "\n"
-    tmp = AGE_SECRETS.with_suffix(".tmp")
-    with open(tmp, "wb") as fh:
-        subprocess.run(["age", "-r", recipient], input=body.encode(),
-                       stdout=fh, check=True)
-    tmp.replace(AGE_SECRETS)
-    AGE_SECRETS.chmod(0o600)
+    body = "\n".join(f"{key}={value}" for key, value in sorted(entries.items())) + "\n"
+    tmp = age_secrets().with_suffix(".tmp")
+    with open(tmp, "wb") as handle:
+        subprocess.run(
+            ["age", "-r", recipient], input=body.encode(), stdout=handle, check=True
+        )
+    tmp.replace(age_secrets())
+    age_secrets().chmod(0o600)
 
 
-def _age_get(provider: str) -> str | None:
+def _age_get(name: str) -> str | None:
     try:
-        return _age_read_all().get(env_var_name(provider))
+        return _age_read_all().get(env_var_name(name))
     except Exception:
         return None
 
 
-def _age_set(provider: str, key: str) -> None:
+def _age_set(name: str, key: str) -> None:
     entries = _age_read_all()
-    entries[env_var_name(provider)] = key
+    entries[env_var_name(name)] = key
     _age_write_all(entries)
 
 
-def _age_delete(provider: str) -> None:
+def _age_delete(name: str) -> None:
     entries = _age_read_all()
-    if entries.pop(env_var_name(provider), None) is not None:
+    if entries.pop(env_var_name(name), None) is not None:
         _age_write_all(entries)
 
-
-# ── Backend: .env plain ──────────────────────────────────────
 
 def _parse_dotenv(text: str) -> dict[str, str]:
     out = {}
     for line in text.splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
-            k, _, v = line.partition("=")
-            out[k.strip()] = v.strip().strip('"').strip("'")
+            key, _, value = line.partition("=")
+            out[key.strip()] = value.strip().strip('"').strip("'")
     return out
 
 
 def _plain_read_all() -> dict[str, str]:
-    if not PLAIN_ENV_FILE.exists():
+    path = plain_env_file()
+    if not path.exists():
         return {}
-    return _parse_dotenv(PLAIN_ENV_FILE.read_text())
+    return _parse_dotenv(path.read_text(encoding="utf-8"))
 
 
 def _plain_write_all(entries: dict[str, str]) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    body = "\n".join(f"{k}={v}" for k, v in sorted(entries.items())) + "\n"
-    PLAIN_ENV_FILE.write_text(body)
-    PLAIN_ENV_FILE.chmod(0o600)
+    config_dir().mkdir(parents=True, exist_ok=True)
+    body = "\n".join(f"{key}={value}" for key, value in sorted(entries.items())) + "\n"
+    path = plain_env_file()
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o600)
 
 
-def _plain_get(provider: str) -> str | None:
-    return _plain_read_all().get(env_var_name(provider))
+def _plain_get(name: str) -> str | None:
+    return _plain_read_all().get(env_var_name(name))
 
 
-def _plain_set(provider: str, key: str) -> None:
+def _plain_set(name: str, key: str) -> None:
     entries = _plain_read_all()
-    entries[env_var_name(provider)] = key
+    entries[env_var_name(name)] = key
     _plain_write_all(entries)
 
 
-def _plain_delete(provider: str) -> None:
+def _plain_delete(name: str) -> None:
     entries = _plain_read_all()
-    if entries.pop(env_var_name(provider), None) is not None:
+    if entries.pop(env_var_name(name), None) is not None:
         _plain_write_all(entries)
 
-
-# ── API pubblica ─────────────────────────────────────────────
 
 BACKENDS = ("keyring", "age", "plain")
 
 
 def detect_best_backend() -> str:
-    """Scelta automatica: keyring su desktop, age su server, plain come fallback."""
     if keyring_available():
         return "keyring"
     if age_available():
@@ -179,46 +199,55 @@ def detect_best_backend() -> str:
 
 
 def store_key(provider: str, key: str, backend: str) -> None:
+    name = canonical(provider)
     if backend == "keyring":
-        _keyring_set(provider, key)
+        _keyring_set(name, key)
     elif backend == "age":
-        _age_set(provider, key)
+        _age_set(name, key)
     elif backend == "plain":
-        _plain_set(provider, key)
+        _plain_set(name, key)
     else:
         raise ValueError(f"backend sconosciuto: {backend}")
 
 
 def get_key(provider: str) -> tuple[str | None, str | None]:
-    """Ritorna (chiave, storage) seguendo la cascata. storage=None se non trovata."""
+    """Ritorna (chiave, storage). Controlla anche gli alias storici, per esempio kimi."""
+    names = lookup_names(provider)
     if keyring_available():
-        key = _keyring_get(provider)
+        for name in names:
+            key = _keyring_get(name)
+            if key:
+                return key, "keyring"
+    for name in names:
+        key = _age_get(name)
         if key:
-            return key, "keyring"
-    key = _age_get(provider)
-    if key:
-        return key, "age"
-    key = _plain_get(provider)
-    if key:
-        return key, "plain"
-    env = os.getenv(env_var_name(provider))
-    if env:
-        return env, "env"
+            return key, "age"
+    for name in names:
+        key = _plain_get(name)
+        if key:
+            return key, "plain"
+    for name in names:
+        env = os.getenv(env_var_name(name))
+        if env:
+            return env, "env"
     return None, None
 
 
 def delete_key(provider: str) -> list[str]:
-    """Rimuove la chiave da tutti gli storage. Ritorna gli storage svuotati."""
     removed = []
-    if keyring_available() and _keyring_get(provider):
-        _keyring_delete(provider)
-        removed.append("keyring")
-    if _age_get(provider):
-        _age_delete(provider)
-        removed.append("age")
-    if _plain_get(provider):
-        _plain_delete(provider)
-        removed.append("plain")
+    for name in lookup_names(provider):
+        if keyring_available() and _keyring_get(name):
+            _keyring_delete(name)
+            if "keyring" not in removed:
+                removed.append("keyring")
+        if _age_get(name):
+            _age_delete(name)
+            if "age" not in removed:
+                removed.append("age")
+        if _plain_get(name):
+            _plain_delete(name)
+            if "plain" not in removed:
+                removed.append("plain")
     return removed
 
 

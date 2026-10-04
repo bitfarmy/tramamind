@@ -1,196 +1,115 @@
-# 🧵 TramaMind
+# TramaMind
 
-IA personale multi-modello: modelli locali (Ollama), API gratuite (Google,
-Groq, NVIDIA, Cerebras, OpenRouter) e Kimi via API, orchestrati dal router
-**OmniRoute** con compressione token e cache semantica integrate.
-Claude Pro si usa solo in modo diretto, mai proxyato.
-
-**Licenza: MIT** — uso personale, mai rivendita né automazione massiva.
-
-## Architettura
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ L-APP  OpenHands (agente di coding, opzionale)          │
-│        → chiama l'API di OmniRoute come un client       │
-├─────────────────────────────────────────────────────────┤
-│ L5  Interfaccia: CLI (scripts/chat.sh)                  │
-│     fase futura: app desktop (fork di Berd)             │
-│ L5b Gateway omnicanale: OpenClaw (Telegram, opz.        │
-│     WhatsApp/Discord) → OmniRoute come provider         │
-├─────────────────────────────────────────────────────────┤
-│ L4  Router: OmniRoute :20128                            │
-│     smart routing (modello "auto") · failover 429/5xx   │
-│     catena: Ollama → Google → Groq → NVIDIA →           │
-│             Cerebras → OpenRouter → Kimi                │
-│     L2 integrato: compressione (RTK/Caveman/…) +        │
-│     cache semantica — nessun proxy separato             │
-├─────────────────────────────────────────────────────────┤
-│ L3A Claude Pro SOLO diretto (Claude Code CLI/claude.ai) │
-│ L3B API gratuite: Google, Groq, NVIDIA, Cerebras,       │
-│     OpenRouter · Kimi via API                           │
-│ L3C Modelli locali su Ollama :11434 (priorità 1:        │
-│     privacy totale, zero costi)                         │
-├─────────────────────────────────────────────────────────┤
-│ L1  Runtime: Ollama (primario) · LM Studio · llama.cpp  │
-│     sul nodo Oracle: Ollama con GGUF (CPU ARM)          │
-└─────────────────────────────────────────────────────────┘
-```
-
-Dettagli: [docs/architecture.md](docs/architecture.md)
-
-### Topologia hub/edge (design approvato)
-
-Il sistema evolve da nodo singolo a distribuito: **hub** always-on su Oracle
-(Ollama con GGUF 9B/4B/2B, OmniRoute con L2 integrato) e **edge** sul PC di
-casa (Ollama con i 26B/27B) che si registra sull'hub via Tailscale quando è
-acceso.
-Gestione chiavi a cascata: keyring (desktop) → .env cifrato age (server) → env.
-Catalogo provider dichiarativo: [router/providers.yaml](router/providers.yaml).
-
-Spec completa: [docs/cloud-implementation.md](docs/cloud-implementation.md) ·
-Decisioni: [docs/hub-edge-topology.md](docs/hub-edge-topology.md)
-
-## Quick start
+Local proxy and chat that shows how many tokens it left out. Recent turns stay word for word, however long they are. From older turns it keeps up to four verbatim excerpts — a code block, a unified diff, a traceback, or a tool result — each at most 1500 characters, and only while they fit. One cloud call, and only when the local answer is empty, a short refusal, or you ask to redo it.
 
 ```bash
-git clone https://github.com/bitfarmy/tramamind.git
-cd tramamind
-./scripts/install.sh --pull-models --with-openhands
-# compila .env, poi inserisci le chiavi in OmniRoute (Dashboard → Providers)
-./scripts/start-all.sh
-./scripts/chat.sh "Scrivi un haiku sulla privacy"
+pipx install "git+https://github.com/bitfarmy/tramamind"
+tramamind demo
+tramamind pack session.json
 ```
 
-Guida completa: [docs/setup.md](docs/setup.md)
+`demo` needs no model. On the sample chat it prints:
 
-### Alternativa Docker Compose
+```
+full history ~10273 · packet ~1211 · −88%
+code kept verbatim: def add(a, b)
+last user message kept: What does add return?
+```
+
+The old turns in that sample are the same sentence repeated, which is why the gap is wide. `def add` comes from those old turns and is still in the packet. The last question is the original message. A long source file in the latest turns is sent whole, and the percentage gets smaller. The figure is this estimate (about 3.5 characters per token), on this chat.
+
+`pack` runs the same packet on your own transcript. The file is a JSON array of messages, or an object with a `messages` key. The line is the one the proxy prints (`storia intera`, `inviati`, the percentage), then the blocks that stayed. `--out packet.json` writes the messages that would be forwarded. Nothing is sent to a model.
+
+## In front of Cursor, Continue, or any OpenAI client
 
 ```bash
-cp .env.example .env   # compila le chiavi
-docker compose up -d
+tramamind proxy
 ```
 
-## CLI `tramamind` — gestione chiavi
+OpenAI base URL: `http://127.0.0.1:8788/v1`
+
+Default upstream: Ollama at `http://127.0.0.1:11434/v1`. OmniRoute, if you use it, is `--upstream http://127.0.0.1:20128/v1`. The chat page stays on port 8787.
+
+```yaml
+# Continue
+name: TramaMind
+provider: openai
+model: qwen2.5-coder:7b
+apiBase: http://127.0.0.1:8788/v1
+apiKey: ollama
+```
+
+Each request prints a line on stderr, and the response carries `X-Tramamind-Raw-Tokens`, `X-Tramamind-Sent-Tokens`, and `X-Tramamind-Saved-Pct`. When the upstream sends `prompt_tokens`, the same line gains `· api N` and the response gains `X-Tramamind-Api-Prompt-Tokens`. The summary is an excerpt, so the model already loaded for the client stays loaded. Your system message stays as it arrived. The log stores the counts.
+
+`--budget` defaults to 2500 estimated tokens and `--verbatim` to the last 6 messages. With a profile, those two values come from `~/.config/tramamind/profile.yaml`.
+
+## Chat on this machine
 
 ```bash
-pip install -e .          # installa la CLI dal repo
-
-tramamind keys setup      # wizard interattivo per tutti i provider
-tramamind keys add groq   # singola chiave
-tramamind keys list       # stato (mascherato) + storage usato
-tramamind keys remove groq
+./scripts/install.sh
+.venv/bin/tramamind setup
+.venv/bin/tramamind pull
+.venv/bin/tramamind chat
 ```
 
-Storage a cascata con rilevamento automatico: **keyring** di sistema su
-desktop, **age** cifrato su server headless, `.env` plain solo per sviluppo.
-I provider vengono letti da `router/providers.yaml` — niente elenchi hardcoded.
+`tramamind ui` serves http://127.0.0.1:8787. That page sets the token budget, chooses Ollama or OmniRoute, starts the proxy, and shows the last savings line.
 
-## Nodo always-on 24/7 (Oracle Cloud Always Free)
+## In italiano
 
-Per usare TramaMind anche a PC spento: una VM ARM Oracle Always Free
-ospita lo stack completo. I limiti dipendono dall'account: le tenancy
-Pay-As-You-Go (come la nostra, verificato 2026-09-29) mantengono
-**4 OCPU / 24 GB**; gli account free-only creati dopo giugno 2026 hanno
-2 OCPU / 12 GB. Con 24 GB:
+Assistente personale sul tuo PC. Il modello di default è locale, via Ollama. La chat ricorda le sessioni e, quando la storia si allunga, ne manda un riassunto più gli ultimi turni, non la trascrizione intera. Se la risposta locale è vuota, è una scusa, o chiedi di rifarla, parte **una** chiamata cloud.
+
+OmniRoute, se lo installi, resta il tubo verso più provider. TramaMind non è un secondo router: decide cosa entra nel prompt e quale modello locale usare.
 
 ```
-Oracle A1 (4 OCPU / 24 GB)
-├── Sistema + Docker        ~2 GB
-├── Ollama 9B (GGUF Q4)     ~7 GB   primario, ctx 8k
-├── Ollama 4B + 2B (GGUF)   ~5 GB   co-caricabili (keep-alive)
-├── OmniRoute (L2 incluso)  ~1.5 GB
-└── Buffer                  ~9 GB
+tramamind chat
+      │
+      ▼
+pacchetto con tetto ──► Ollama
+      │
+      └─ solo se serve ──► Groq diretto, oppure OmniRoute
 ```
 
-Modelli sul nodo (GGUF via Ollama): **Qwen3.5-9B-Claude-Opus-Distill-v2**
-(primario), **GPT-5-Distill-Qwen3-4B** (bilanciato) e
-**Gemini3.5-Code-Reasoner-2B** (task veloci/heartbeat). I 26B/27B restano
-solo sul PC locale, raggiungibili via Tailscale quando è acceso.
-Se il tuo account ha 12 GB invece di 24: escludi il 9B e usa 4B+2B
-(vedi docs/oracle-free-tier.md). Accesso via Tailscale, zero porte esposte,
-costo 0 €/mese.
+Ollama da solo non tiene un tetto sulla storia e non cambia modello in base alla domanda. OmniRoute da solo non sceglie i modelli per la tua RAM e non distingue una risposta scarsa da un errore HTTP. TramaMind fa quelle due cose e lascia il resto a loro.
+
+`tramamind proxy` mette lo stesso pacchetto davanti a Cursor, Continue o a qualsiasi client compatibile con OpenAI. `tramamind demo` mostra il conto senza scaricare un modello. `tramamind pack sessione.json` fa lo stesso conto sulla tua trascrizione.
+
+Claude Pro non passa di qui. Per il codice serio resta Claude Code, diretto.
 
 ```bash
-# sulla VM Oracle (Ubuntu 24.04 ARM):
-curl -fsSL https://raw.githubusercontent.com/bitfarmy/tramamind/main/scripts/oracle-setup.sh | bash
+./scripts/install.sh
+.venv/bin/tramamind setup          # preset in base alla RAM, chiavi opzionali
+.venv/bin/tramamind pull           # scarica i tag del preset
+.venv/bin/tramamind chat
 ```
 
-Guida completa: [docs/oracle-free-tier.md](docs/oracle-free-tier.md)
+Pagina locale, solo su questa macchina: `tramamind ui` poi http://127.0.0.1:8787. Da lì partono anche tetto, upstream e il proxy su `http://127.0.0.1:8788/v1`.
 
-## Script
+Corsie: `tramamind chat --code "…"`, `--think`, `--fast`. In chat: `/new`, `/sessions`, `/resume`, `/use code`, `/clear`.
 
-| Script | Cosa fa |
-|---|---|
-| `scripts/install.sh` | Verifica dipendenze, crea `.env` e `data/`; `--pull-models`, `--with-openhands` |
-| `scripts/start-all.sh` | Avvia Ollama + OmniRoute (+ OpenHands, `--no-openhands` per saltarlo) |
-| `scripts/stop-all.sh` | Ferma solo ciò che ha avviato start-all |
-| `scripts/chat.sh` | REPL CLI con provenienza, latenza e token per risposta |
-| `scripts/doctor.sh` | Diagnostica completa dello stack |
-| `scripts/stats.sh` | Statistiche d'uso dai log |
-| `scripts/start-openclaw.sh` | Avvia il gateway OpenClaw (dopo aver verificato OmniRoute) |
-| `scripts/oracle-setup.sh` | Provisioning VM Oracle Always Free (Docker, Ollama, modelli GGUF, UFW, swap) |
-| `benchmarks/benchmark.sh` | Misura routing + compressione + cache sui tuoi prompt |
+Sotto ogni risposta c'è il conto: token inviati, stima della storia intera, e la percentuale tolta dal pacchetto quando c'è stato un riassunto. `tramamind stats` aggrega quei conti, senza il testo.
 
-## OpenHands (agente di coding autonomo)
+`tramamind doctor` dice cosa manca. Se Ollama non risponde, il comando fallisce: non stampa "attivo" lo stesso.
 
-OpenHands (MIT, self-hosted) è integrato come **livello applicativo**: punta
-all'endpoint OpenAI-compatible di OmniRoute e ogni sua chiamata eredita
-routing per capability, failover e compressione — un task agentico genera
-50–200 chiamate LLM, ed è proprio il workload dove cache semantica e
-fallback fanno la differenza. UI su http://localhost:3000.
+### Preset
 
-Guida: [docs/openhands-integration.md](docs/openhands-integration.md)
+| Preset | Quando | Generale | Codice | Ragionamento |
+|---|---|---|---|---|
+| `cpu16` | portatile, 16 GB | `gemma3:4b` | `qwen2.5-coder:3b` | `deepseek-r1:1.5b` |
+| `gpu12` | GPU ~12 GB | `qwen3:8b` | `qwen2.5-coder:7b` | `deepseek-r1:8b` |
+| `gpu24` | GPU 24 GB | `qwen3:32b` | `qwen2.5-coder:14b` | `deepseek-r1:14b` |
 
-## OpenClaw (gateway Telegram / WhatsApp / Discord)
+Il tag `summary` del profilo è `gemma3:4b`. Viene chiamato solo se è già il modello della risposta (è il caso di `cpu16`). Sugli altri preset il riassunto è estrattivo, per non ricaricare un modello a ogni messaggio. Il proxy è sempre estrattivo. I tag sono quelli di [docs/local-models.md](docs/local-models.md).
 
-OpenClaw (MIT) è integrato come **livello L5b**: un gateway che espone
-TramaMind su Telegram (e opzionalmente WhatsApp/Discord) puntando a
-OmniRoute come provider OpenAI-compatible. Routing, failover, compressione
-e cache semantica restano tutti attivi — da Telegram puoi anche forzare la
-corsia con `/model locale` (solo modelli locali) o `/model cloud` (solo API
-gratuite). Gira in Docker hardened (bind su 127.0.0.1, read-only,
-sandbox per i tool); heartbeat periodico solo su modelli locali, costo zero.
+### Chiavi
 
-```bash
-cd integrations/openclaw
-cp .env.example .env   # token bot Telegram da @BotFather
-docker compose up -d
-```
+`tramamind keys add groq` le mette nel keyring (oppure in un file age, oppure in `~/.config/tramamind/.env` con permessi `0600`). Con una chiave Groq l'escalation funziona anche senza OmniRoute. `tramamind sync` spinge le chiavi nel CLI di OmniRoute, se c'è.
 
-Guida: [integrations/openclaw/README.md](integrations/openclaw/README.md)
+Il modello cloud di default nel profilo è `openai/gpt-oss-120b`. Se quel catalogo cambia, lo sostituisci in `~/.config/tramamind/profile.yaml`.
 
-Nota: Claude **non** passa da OpenClaw — su harness di terze parti richiede
-billing pay-as-you-go (cambio Anthropic, aprile 2026). Claude Pro resta
-solo su Claude Code CLI diretto (regola 4).
+### Cosa non fa
 
-## Documentazione
+Il risparmio è il pacchetto: ultimi turni interi, e dai turni vecchi un estratto più fino a quattro pezzi parola per parola (codice, diff, traceback, risultato di un tool) se ci stanno. Ogni pezzo vecchio è al massimo 1500 caratteri. La compressione di OmniRoute, se la accendi dalla sua dashboard, è un'altra cosa e può tagliare proprio il pezzo che serviva. Il numero di cui mi fido è quello stampato da `tramamind chat`, da `tramamind demo`, da `tramamind pack` e dal proxy. Quando il provider manda `prompt_tokens`, la riga del proxy lo affianca alla stima.
 
-| Doc | Contenuto |
-|---|---|
-| [docs/architecture.md](docs/architecture.md) | I 5 livelli e le scelte di design |
-| [docs/setup.md](docs/setup.md) | Installazione, configurazione, problemi comuni |
-| [docs/local-models.md](docs/local-models.md) | Scelta dei modelli locali per hardware |
-| [docs/compression.md](docs/compression.md) | Pipeline di compressione e cache semantica |
-| [docs/openhands-integration.md](docs/openhands-integration.md) | Integrazione agente ↔ router |
-| [docs/oracle-free-tier.md](docs/oracle-free-tier.md) | Nodo always-on 24/7 su Oracle Cloud |
-| [docs/cloud-implementation.md](docs/cloud-implementation.md) | Spec implementazione ibrida hub/edge |
-| [docs/hub-edge-topology.md](docs/hub-edge-topology.md) | Registro decisioni topologia |
-| [integrations/openclaw/README.md](integrations/openclaw/README.md) | Gateway omnicanale Telegram/WhatsApp |
-| [docs/legal.md](docs/legal.md) | Licenze e termini d'uso |
+OpenHands e OpenClaw sono extra, spenti. L'app desktop e il nodo Oracle non fanno parte del flusso: gli appunti sono in [docs/future/](docs/future/).
 
-## Regole inviolabili
-
-1. Chiavi API solo in `.env` (gitignored), mai in chiaro nel codice
-2. Uso personale: niente rivendita né automazione massiva
-3. Modelli locali = priorità 1 (privacy totale, zero costi)
-4. Claude Pro resta fuori dal router — solo accesso diretto
-5. Niente componenti aspirazionali: se non è installabile, non è nel repo
-
-## Requisiti
-
-**PC principale:** Node 22.22.2+ (o 24–26) · Python 3.10+ · Ollama · Docker
-(per OpenHands e OpenClaw) · 16 GB RAM · 50 GB SSD · jq (per i benchmark)
-
-**Nodo Oracle (opzionale):** account Oracle Cloud · VM.Standard.A1.Flex
-fino a 4 OCPU / 24 GB (Always Free) · Ubuntu 24.04 ARM64
+Licenza MIT. Uso personale delle API gratuite: [docs/legal.md](docs/legal.md).

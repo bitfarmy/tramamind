@@ -1,6 +1,8 @@
 # Catalogo Modelli Locali
 
-Modelli open source che girano interamente sul tuo PC via Ollama. Sostituiscono i "distillati" della prima bozza: i nomi Gemopus/Qwopus non corrispondevano a modelli reali, qui sotto ci sono solo modelli verificati e scaricabili oggi dalla libreria Ollama.
+Questi sono i tag Ollama dei preset. `cpu16` usa `gemma3:4b`, `qwen2.5-coder:3b` e `deepseek-r1:1.5b`. `gpu12` usa `qwen3:8b`, `qwen2.5-coder:7b` e `deepseek-r1:8b`. `gpu24` usa `qwen3:32b`, `qwen2.5-coder:14b` e `deepseek-r1:14b`. Il riassunto della chat usa sempre `gemma3:4b`.
+
+I nomi Gemopus e Qwopus non sono modelli: non compaiono nel profilo.
 
 ---
 

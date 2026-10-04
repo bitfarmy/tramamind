@@ -18,7 +18,7 @@ OUT="$ROOT/data/benchmark-$(date +%Y%m%d-%H%M%S).csv"
 
 command -v jq >/dev/null 2>&1 || { echo "❌ jq mancante: sudo apt install jq"; exit 1; }
 curl -s --max-time 3 "${ENDPOINT%/chat/completions}/models" >/dev/null 2>&1 || {
-  echo "❌ Router non raggiungibile. Avvia lo stack con ./scripts/start-all.sh"; exit 1;
+  echo "❌ Router non raggiungibile su $ENDPOINT. Serve OmniRoute acceso (tramamind up)."; exit 1;
 }
 
 mkdir -p "$ROOT/data"

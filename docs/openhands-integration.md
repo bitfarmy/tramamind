@@ -1,5 +1,7 @@
 # Integrazione OpenHands + OmniRoute
 
+> Extra, spento. `tramamind up` non lo avvia. Il prodotto è la chat con il tetto sui token.
+
 Come far lavorare insieme l'agente di coding autonomo (OpenHands) e il router
 (OmniRoute) dentro TramaMind.
 
@@ -116,7 +118,7 @@ Nella dashboard OmniRoute vedi le chiamate con provider e token.
 | Problema | Causa | Mitigazione |
 |---|---|---|
 | **Doppio retry** | OpenHands (LiteLLM) e OmniRoute ritentano entrambi → backoff sommati | `LLM_NUM_RETRIES=2`: il failover vive solo nel router |
-| **OmniRoute FATAL ERROR** | heap V8 default 1 GB insufficiente per contesti lunghi agentici | `OMNIROUTE_MEMORY_MB=8192`; in compose container ≥10 GB |
+| **OmniRoute FATAL ERROR** | heap V8 da 1 GB corto per contesti lunghi di un agente | alza `OMNIROUTE_MEMORY_MB` solo per quell'agente; la chat resta a 1024 |
 | **Errori 400 criptici** | modello senza prefisso `openai/` | sempre `openai/<modello>` |
 | **Agente muto** | alcuni backend non gradiscono lo streaming | `disable_streaming = true` nel `[llm]` di config.toml |
 | **localhost dal container** | in Docker localhost ≠ host | nativo: `host.docker.internal`; compose: rete interna |
