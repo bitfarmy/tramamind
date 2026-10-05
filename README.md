@@ -1,11 +1,15 @@
 # TramaMind
 
-Local proxy and chat that shows how many tokens it left out. Recent turns stay word for word, however long they are. From older turns it keeps up to four verbatim excerpts — a code block, a unified diff, a traceback, or a tool result — each at most 1500 characters, and only while they fit. One cloud call, and only when the local answer is empty, a short refusal, or you ask to redo it.
+[![PyPI](https://img.shields.io/pypi/v/tramamind?color=e6a15c&label=pypi)](https://pypi.org/project/tramamind/)
+[![MIT](https://img.shields.io/badge/license-MIT-b7ab9a)](LICENSE)
+
+Shows the tokens it refused to send.
+
+Recent turns stay whole, however long they are. From older turns it keeps up to four pieces, word for word: a code block, a unified diff, a traceback, or a tool result. Each piece is at most 1500 characters, and only while it fits. One cloud call, and only when the local answer is empty, a short refusal, or you ask to redo it.
 
 ```bash
-pipx install "git+https://github.com/bitfarmy/tramamind"
+pipx install tramamind
 tramamind demo
-tramamind pack session.json
 ```
 
 `demo` needs no model. On the sample chat it prints:
@@ -18,7 +22,24 @@ last user message kept: What does add return?
 
 The old turns in that sample are the same sentence repeated, which is why the gap is wide. `def add` comes from those old turns and is still in the packet. The last question is the original message. A long source file in the latest turns is sent whole, and the percentage gets smaller. The figure is this estimate (about 3.5 characters per token), on this chat.
 
-`pack` runs the same packet on your own transcript. The file is a JSON array of messages, or an object with a `messages` key. The line is the one the proxy prints (`storia intera`, `inviati`, the percentage), then the blocks that stayed. `--out packet.json` writes the messages that would be forwarded. Nothing is sent to a model.
+```
+your client
+      │
+      ▼
+packet, under the budget ──► Ollama
+      │
+      └─ once, if the local answer fails ──► Groq, or OmniRoute
+```
+
+To follow `main` instead of this release: `pipx install "git+https://github.com/bitfarmy/tramamind"`.
+
+## On your own transcript
+
+```bash
+tramamind pack session.json
+```
+
+The file is a JSON array of messages, or an object with a `messages` key. The line is the one the proxy prints (`storia intera`, `inviati`, the percentage), then the blocks that stayed. `--out packet.json` writes the messages that would be forwarded. Nothing is sent to a model.
 
 ## In front of Cursor, Continue, or any OpenAI client
 
@@ -46,13 +67,19 @@ Each request prints a line on stderr, and the response carries `X-Tramamind-Raw-
 ## Chat on this machine
 
 ```bash
+tramamind ui
+```
+
+http://127.0.0.1:8787 sets the token budget, chooses Ollama or OmniRoute, starts the proxy, and shows the last savings line.
+
+From a clone:
+
+```bash
 ./scripts/install.sh
 .venv/bin/tramamind setup
 .venv/bin/tramamind pull
 .venv/bin/tramamind chat
 ```
-
-`tramamind ui` serves http://127.0.0.1:8787. That page sets the token budget, chooses Ollama or OmniRoute, starts the proxy, and shows the last savings line.
 
 ## In italiano
 

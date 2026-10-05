@@ -31,10 +31,10 @@ tramamind proxy
 `tramamind demo` stampa il conto dei token su una chat di esempio e non ha bisogno di Ollama. `tramamind pack sessione.json` fa il conto su un file di messaggi. Da un altro ambiente Python:
 
 ```bash
-pipx install "git+https://github.com/bitfarmy/tramamind"
+pipx install tramamind
 ```
 
-Oppure, da questo repository, `pipx install .`.
+Per seguire `main`: `pipx install "git+https://github.com/bitfarmy/tramamind"`. Da questo repository, `pipx install .`.
 
 Per Groq: https://console.groq.com/keys e poi `tramamind keys add groq`. L'escalation usa l'API OpenAI-compatible di Groq, senza passare da OmniRoute.
 
